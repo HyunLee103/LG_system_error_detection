@@ -51,6 +51,8 @@ def mk_err_feature(df,user_num,user_min):
 
     return np.concatenate((error,model,code_df),axis=1)
 
+    
+
 def mk_qt_feature(df,vars,user_num,user_min):
     q1 = np.zeros((user_num,5))
     q2 = np.zeros((user_num,5))

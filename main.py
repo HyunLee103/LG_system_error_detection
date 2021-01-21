@@ -20,8 +20,11 @@ from util import mk_err_feature
 from util import mk_qt_feature
 
 
+test_user_id_max = 44998
+test_user_id_min = 30000
+test_user_number = 14999
 
-def main(sub_name,submit=False,model='lgbm'):
+def main(sub_name,duplicate=False,submit=False,train=True,model='lgbm'):
     ## data load 
     PATH = "data/"
     train_err  = pd.read_csv(PATH+'train_err_data.csv')
@@ -29,6 +32,11 @@ def main(sub_name,submit=False,model='lgbm'):
     train_problem  = pd.read_csv(PATH+'train_problem_data.csv')
     test_err  = pd.read_csv(PATH+'test_err_data.csv')
     test_quality  = pd.read_csv(PATH+'test_quality_data.csv')
+    
+    # 중복 제거
+    if duplicate:
+        train_err = train_err[train_err.duplicated()==False]
+        train_quality = train_quality[train_quality.duplicated()==False]
 
 
     ## FE
@@ -43,6 +51,8 @@ def main(sub_name,submit=False,model='lgbm'):
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
     train_y = problem
+
+
 
     ## modeling
     if train:
@@ -69,7 +79,7 @@ def main(sub_name,submit=False,model='lgbm'):
             valid_x = train_x[val_idx]
             valid_y = train_y[val_idx]
 
-            if model = 'lgb'
+            if model == 'lgb':
                 d_train= lgb.Dataset(X, y)
                 d_val  = lgb.Dataset(valid_x, valid_y)           
                 #run traning
@@ -112,5 +122,7 @@ def main(sub_name,submit=False,model='lgbm'):
         # submit
         sample_submission = pd.read_csv(PATH+'sample_submission.csv')
         sample_submission['problem'] = pred_ensemble.reshape(-1)
-        os.mkdir("./submission")
+        if not os.path.exists('submission'):
+            os.makedirs(os.path.join('submission'))
         sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
+
