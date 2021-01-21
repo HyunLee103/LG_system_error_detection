@@ -83,7 +83,20 @@ err_pr_id = train_err_id & train_pr_id
 # err에서 불만 접수 없는 user_id, 만명
 err_nopr_id = train_err_id - train_pr_id
 
+## fwver에 따른 qt 분포 확인
+train_quality.groupby(['fwver']).mean()
+train_quality.fwver.nunique()
+train_quality_main = train_quality[train_quality['fwver'].isin(['03.11.1167','04.16.3553','04.22.1750','04.22.1778','04.33.1185','04.33.1261','05.15.2138'])]
+train_quality.groupby(['user_id']).sum()
 
+# 결측값 처리
+train_quality.isnull().sum()
+
+train_quality['quality_5'] = train_quality['quality_5'].fillna(0)
+train_quality['quality_0'] = train_quality['quality_0'].fillna(0)
+train_quality.dropna(inplace=True)
+
+train_quality.shape # 78만
 
 
 """
