@@ -16,6 +16,8 @@ import warnings
 warnings.filterwarnings(action='ignore')
 
 from util import f_pr_auc
+from util import mk_err_feature
+from util import mk_qt_feature
 
 
 
@@ -30,10 +32,17 @@ def main(sub_name,submit=False,model='lgbm'):
 
 
     ## FE
+    err_train = mk_err_feature(train_err,15000,10000)
+    q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
+    train_x = np.concatenate((err_train,q_train),axis=1)
     
-    train_x
-    train_y
-    test_x
+    test_x = mk_err_feature(test_err,test_user_number,test_user_id_min)
+    q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
+    test_x = np.concatenate((test_x,q_test),axis=1)
+
+    problem = np.zeros(15000)
+    problem[train_problem.user_id.unique()-10000] = 1
+    train_y = problem
 
     ## modeling
     if train:
@@ -59,7 +68,7 @@ def main(sub_name,submit=False,model='lgbm'):
             y = train_y[train_idx]
             valid_x = train_x[val_idx]
             valid_y = train_y[val_idx]
-            
+
             if model = 'lgb'
                 d_train= lgb.Dataset(X, y)
                 d_val  = lgb.Dataset(valid_x, valid_y)           
