@@ -79,3 +79,41 @@ def mk_qt_feature(df,vars,user_num,user_min):
             q2 += res
     
     return np.concatenate((q1/7,q2/4),axis=1)
+
+
+def make_datetime(x):
+    # string 타입의 Time column을 datetime 타입으로 변경
+    x = str(x)
+    # print(x)
+    year = int(x[:4])
+    month = int(x[4:6])
+    day = int(x[6:8])
+    hour = int(x[8:10])
+    # min  = int(x[10:12])
+    # sec  = int(x[12:])
+    return dt.datetime(year, month, day, hour)
+
+
+def mk_time_feature(df, user_num, user_min):
+    # column return 추가 필요
+
+    df['time'] = df['time'].map(lambda x: make_datetime(x))
+
+    df["hour"] = df["time"].dt.hour
+    df["dayofweek"] = df["time"].dt.dayofweek
+
+    # hour
+    hour_error = df[['user_id', 'hour']].values
+    hour = np.zeros((user_num, 24))
+
+    for person_idx, hr in tqdm(hour_error):
+        hour[person_idx - user_min, hr - 1] += 1
+
+    # day
+    day_error = df[['user_id', 'dayofweek']].values
+    day = np.zeros((user_num, 7))
+
+    for person_idx, d in tqdm(day_error):
+        day[person_idx - user_min, d - 1] += 1
+
+    return np.concatenate((hour, day), axis=1)
