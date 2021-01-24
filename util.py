@@ -199,6 +199,6 @@ def mk_errtype_feature(df, user_num, user_min, type):
         return np.concatenate((error_type_vl, error_type_vl_only_complainer.reshape((user_num, 1))), axis=1)
 
     if type == 1:
-        # 방법 2 : 총 42 차원 : 39차원 - 2차원(29,36) + 2차원(34(com)/4,5,26(no_com))
+        # 방법 2 : 총 42 차원 : 39차원 + 2차원(34(com)/4,5,26(no_com)) + 1차원(23,25(timeout))
         return np.concatenate((error_type_vl, error_type_vl_only_complainer.reshape((user_num, 1)),
                                error_type_vl_timeout.reshape((user_num, 1))), axis=1)
