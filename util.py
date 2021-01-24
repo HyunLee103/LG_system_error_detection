@@ -117,3 +117,17 @@ def mk_time_feature(df, user_num, user_min):
         day[person_idx - user_min, d - 1] += 1
 
     return np.concatenate((hour, day), axis=1)
+
+## fwver_count
+def mk_fwver_feature(df,user_num,user_min):
+    df = df.groupby(['user_id', 'model_nm'])
+    user_id_fwver_count = df['fwver'].describe()
+    fwver_array = np.array(user_id_fwver_count.unique)
+    fwver_count = np.zeros((user_num, 1))
+    
+    id = 0
+    for user_id, model_nm in tqdm(user_id_fwver_count.index):
+        fwver_count[user_id-user_min,0] += fwver_array[id]
+        id +=1
+        
+    return fwver_count
