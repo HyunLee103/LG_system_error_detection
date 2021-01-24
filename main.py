@@ -4,6 +4,7 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+from pycaret.classification import *
 
 from tqdm import tqdm
 import gc
@@ -15,12 +16,8 @@ from sklearn.model_selection import KFold
 import warnings
 warnings.filterwarnings(action='ignore')
 
-from util import f_pr_auc
-from util import mk_err_feature
-from util import mk_qt_feature
-from util import mk_time_feature
-from util import mk_fwver_feature
-from util import mk_time_seg_feature
+from util import f_pr_auc, mk_err_feature, mk_qt_feature, mk_time_feature, mk_fwver_feature, mk_time_seg_feature
+
 
 
 test_user_id_max = 44998
@@ -43,32 +40,26 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
 
 
     ## FE
-    err_train = mk_err_feature(train_err,15000,10000)
+    err_train = mk_err_feature(train_err,15000,10000,0)
     q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
-    # fwver_count
     err_fwver_train = mk_fwver_feature(train_err,15000,10000)
-    #time
-    # err_time_train = mk_time_feature(train_err, 15000, 10000)
-    # quality_time_train = mk_time_feature(train_quality, 15000, 10000)
-    err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
-    # quality_time_seg_train = mk_time_seg_feature(train_quality)
-    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_time_seg_train), axis=1)
+    # err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
+    quality_time_seg_train = mk_time_seg_feature(train_quality,15000,10000)
+    train_x = np.concatenate((err_train, q_train, err_fwver_train,quality_time_seg_train), axis=1)
     
-    test_x = mk_err_feature(test_err, test_user_number,test_user_id_min)
+    test_x = mk_err_feature(test_err, test_user_number,test_user_id_min,0)
     q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
     err_fwver_test = mk_fwver_feature(test_err, test_user_number,test_user_id_min)
-    # time
-    err_time_test = mk_time_feature(test_err, test_user_number, test_user_id_min)
-    quality_time_test = mk_time_feature(test_quality, test_user_number, test_user_id_min)
-    err_time_seg_test = mk_time_seg_feature(test_err,test_user_number,test_user_id_min)
-    # quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
-    test_x = np.concatenate((test_x, q_test, err_fwver_test, err_time_seg_test), axis=1)
+    # err_time_seg_test = mk_time_seg_feature(test_err,test_user_number,test_user_id_min)
+    quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
+    test_x = np.concatenate((test_x, q_test, err_fwver_test,quality_time_seg_test), axis=1)
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
     train_y = problem
 
-
+    print(train_x.shape)
+    print(test_x.shape)
 
     ## modeling
     if train:
@@ -82,7 +73,7 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
             final_model = finalize_model(blended)
             
             ## test
-            test = pd.DataFrame(data=final_test_x)
+            test = pd.DataFrame(data=test_x)
             predictions = predict_model(final_model, data = test)
             
             
@@ -102,7 +93,7 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
                 os.makedirs(os.path.join('submission'))
             sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
             
-            
+
             
         if model == 'lgb':
             models     = []
@@ -175,3 +166,6 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
                 os.makedirs(os.path.join('submission'))
             sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
 
+
+if __name__ == '__main__':
+    main('newbase_errtype0_lgbm')

@@ -70,6 +70,7 @@ def mk_err_feature(df,user_num,user_min,type):
                 error_type3_vl[person_idx - 10000, 3] += 1
         error = error_type3_vl
 
+
     # model_nm
     id_model = df[['user_id','model_nm']].values
     model = np.zeros((user_num,9))
@@ -94,11 +95,23 @@ def mk_err_feature(df,user_num,user_min,type):
     
 
 def mk_qt_feature(df,vars,user_num,user_min):
-    q1 = np.zeros((user_num,5))
-    q2 = np.zeros((user_num,5))
+    q1 = np.zeros((user_num,6))
+    q2 = np.zeros((user_num,6))
+    q3 = np.zeros((user_num,1))
+    # for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
+    #     df[qual_num] = df[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
+
+    # qt_cnt
+    qt_cnt = df.groupby('user_id').count()['time']/12
+    dict = {key:value for key,value in zip(qt_cnt.index,qt_cnt.values)}
+    for i in range(15000):
+        if i+user_min in dict.keys():
+            q3[i,0] = dict[i+user_min]
+
+    # 0,1,2,6,8,11,12 거의 비슷, 5,7,9,10 거의 비슷, 각각 평균 내서 사용
     for i, var in enumerate(vars):
         id_q = df[['user_id',var]].values
-        res = np.zeros((user_num,5))
+        res = np.zeros((user_num,6))
 
         for idx, num in tqdm(id_q):
             if num == 0:
@@ -109,16 +122,17 @@ def mk_qt_feature(df,vars,user_num,user_min):
                 res[int(idx)-user_min,2] += 1
             elif num == 2:
                 res[int(idx)-user_min,3] += 1
-            else:
+            elif num == 3:
                 res[int(idx)-user_min,4] += 1
+            else:
+                res[int(idx)-user_min,5] += 1
 
-        # 0,1,2,6,8,11,12 거의 비슷, 5,7,9,10 거의 비슷, 각각 평균 내서 사용
         if i in [0,1,2,4,6,9,10]:
             q1 += res
         else:
             q2 += res
-    
-    return np.concatenate((q1/7,q2/4),axis=1)
+        
+    return np.concatenate((q1/7,q2/4,q3),axis=1)
 
 
 def make_datetime(x):
