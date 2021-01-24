@@ -173,3 +173,32 @@ def mk_time_seg_feature(df, user_num, user_min):
         day_err[person_idx - user_min, day - 1] += 1
 
     return np.concatenate((hour_err, day_err), axis=1)
+
+
+def mk_errtype_feature(df, user_num, user_min, type):
+    df = df[~df['errtype'].isin([36])][['user_id', 'errtype']]
+    error_type = df[['user_id', 'errtype']].values
+    error_type_vl = np.zeros((user_num, 40))
+
+    for person_idx, err in tqdm(error_type):
+        # 29개 위로는 29가 없기 때문에 1개씩 땡기고  36위로는 36이 없기 때문에 2개씩 땡겨야한다
+        if err > 36:
+            err = err - 2
+        elif err > 29:
+            err = err - 1
+        error_type_vl[person_idx - user_min, err - 1] += 1
+
+    # errtype 중 4,5,26이 complainer에서 더 많이 등장함
+    error_type_vl_only_complainer = error_type_vl[:, 3] + error_type_vl[:, 4] + error_type_vl[:, 25]
+
+    # errtype 중 23,25이 timeout이 더 많이 등장함
+    error_type_vl_timeout = error_type_vl[:, 22] + error_type_vl[:, 24]
+
+    if type == 0:
+        # 방법 1 : 총 41 차원 : 39차원 + 2차원(34(com)/4,5,26(no_com))
+        return np.concatenate((error_type_vl, error_type_vl_only_complainer.reshape((user_num, 1))), axis=1)
+
+    if type == 1:
+        # 방법 2 : 총 42 차원 : 39차원 - 2차원(29,36) + 2차원(34(com)/4,5,26(no_com))
+        return np.concatenate((error_type_vl, error_type_vl_only_complainer.reshape((user_num, 1)),
+                               error_type_vl_timeout.reshape((user_num, 1))), axis=1)
