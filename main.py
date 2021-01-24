@@ -19,6 +19,8 @@ from util import f_pr_auc
 from util import mk_err_feature
 from util import mk_qt_feature
 from util import mk_time_feature
+from util import mk_fwver_feature
+from util import mk_time_seg_feature
 
 
 test_user_id_max = 44998
@@ -43,18 +45,24 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
     ## FE
     err_train = mk_err_feature(train_err,15000,10000)
     q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
-    err_time_train = mk_time_feature(train_err, 15000, 10000)
     # fwver_count
     err_fwver_train = mk_fwver_feature(train_err,15000,10000)
-    quality_time_train = mk_time_feature(train_quality, 15000, 10000)
-    train_x = np.concatenate((err_train, q_train, err_time_train, quality_time_train, err_time_train), axis=1)
+    #time
+    # err_time_train = mk_time_feature(train_err, 15000, 10000)
+    # quality_time_train = mk_time_feature(train_quality, 15000, 10000)
+    err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
+    # quality_time_seg_train = mk_time_seg_feature(train_quality)
+    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_time_seg_train), axis=1)
     
-    test_x = mk_err_feature(test_err,test_user_number,test_user_id_min)
+    test_x = mk_err_feature(test_err, test_user_number,test_user_id_min)
     q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
+    err_fwver_test = mk_fwver_feature(test_err, test_user_number,test_user_id_min)
+    # time
     err_time_test = mk_time_feature(test_err, test_user_number, test_user_id_min)
-    err_fwver_test = mk_fwver_feature(test_err,test_user_number,test_user_id_min)
     quality_time_test = mk_time_feature(test_quality, test_user_number, test_user_id_min)
-    test_x = np.concatenate((test_x, q_test, err_time_test, quality_time_test, err_fwver_test), axis=1)
+    err_time_seg_test = mk_time_seg_feature(test_err,test_user_number,test_user_id_min)
+    # quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
+    test_x = np.concatenate((test_x, q_test, err_fwver_test, err_time_seg_test), axis=1)
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
@@ -64,7 +72,7 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
 
     ## modeling
     if train:
-        if model = 'automl':
+        if model == 'automl':
             train = pd.DataFrame(data=train_x)
             train['problem'] = problem
             clf = setup(data = train, target = 'problem', session_id = 123) 
@@ -96,7 +104,7 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
             
             
             
-        if model = 'lgb':
+        if model == 'lgb':
             models     = []
             recalls    = []
             precisions = []
