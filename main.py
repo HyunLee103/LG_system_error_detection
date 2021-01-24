@@ -42,16 +42,44 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
         train_quality = train_quality[train_quality.duplicated()==False]
 
 
-    ## FE
-    err_train = mk_err_feature(train_err,15000,10000)
-    q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
     # fwver_count
     err_fwver_train = mk_fwver_feature(train_err,15000,10000)
+
+
     #time
     # err_time_train = mk_time_feature(train_err, 15000, 10000)
     # quality_time_train = mk_time_feature(train_quality, 15000, 10000)
     err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
     # quality_time_seg_train = mk_time_seg_feature(train_quality)
+
+
+    ### errcode를 위한 전처리
+    
+    train_err['time'] = pd.to_datetime(train_err['time'], format="%Y%m%d%H%M%S")
+    train_problem['time'] = pd.to_datetime(train_problem['time'], format="%Y%m%d%H%M%S")
+
+    train_err['is_complain'] = train_err['user_id'].isin(train_problem['user_id'])
+    complainer = train_err[train_err['is_complain']==True]
+    no_complainer = train_err[train_err['is_complain']==False]
+  
+    complainer_48h_before = np.zeros((0,2))
+
+    ##신고시간 기준 24h이내 train_err (complainer_24h_before) 만들기
+    for id in train_problem.user_id.unique():
+    #print(id)
+        for time in train_problem[train_problem.user_id == id ].time:
+            time_48h_before_complain = time - dt.timedelta(days=2)
+            temp=(complainer[(complainer['user_id'] == id) & (complainer['time'] > time_48h_before_complain) & (complainer['time'] <= time)][['user_id','errcode']])
+            complainer_48h_before= np.concatenate([complainer_48h_before, temp])
+
+    complainer_48h_before = pd.DataFrame(complainer_48h_before , columns=['user_id','errcode'] )
+
+
+    # FE
+    err_train = mk_err_feature(train_err,15000,10000,complainer_48h_before,no_complainer)
+    q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
+    
+
     train_x = np.concatenate((err_train, q_train, err_fwver_train, err_time_seg_train), axis=1)
     
     test_x = mk_err_feature(test_err, test_user_number,test_user_id_min)
