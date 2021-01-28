@@ -22,8 +22,7 @@ from util import mk_qt_feature
 from util import mk_time_feature
 from util import mk_fwver_feature
 from util import mk_time_seg_feature
-
-from fill_in_na import fill_quality_missing
+from util import fill_quality_missing
 
 
 test_user_id_max = 44998
