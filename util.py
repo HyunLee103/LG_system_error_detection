@@ -22,84 +22,85 @@ def f_pr_auc(probas_pred, y_true):
     score=auc(r,p) 
     return "pr_auc", score, True
 
-def mk_err_feature(df,user_num,user_min,type):
-    # errtype
-    # type : errtype 전처리 방법 밑에 값 확인 필요
-    err_df = df[~df['errtype'].isin([36])][['user_id', 'errtype']]
-    error_type = err_df[['user_id', 'errtype']].values
 
-    if type < 2:
-        error_type_vl = np.zeros((user_num, 40))
+def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain):
 
-        for person_idx, err in tqdm(error_type):
-            # 29개 위로는 29가 없기 때문에 1개씩 땡기고  36위로는 36이 없기 때문에 2개씩 땡겨야한다
-            if err > 36:
-                err = err - 2
-            elif err > 29:
-                err = err - 1
-            error_type_vl[person_idx - user_min, err - 1] += 1
+    df['typecode'] = df.errtype.astype(str) + df.errcode.astype(str)
+    id_err_var = df[['user_id','typecode','errtype','fwver','errcode']].values
 
-        # errtype 중 4,5,26이 complainer에서 더 많이 등장함
-        error_type_vl_only_complainer = error_type_vl[:, 3] + error_type_vl[:, 4] + error_type_vl[:, 25]
+    # 빈 array 생성
+    typecode_arr = np.zeros((user_num,3))
+    type_arr = np.zeros((user_num,47))
+    fwver_arr = np.zeros((user_num,10))
+    code_arr = np.zeros((user_num, 17))
 
-        # errtype 중 23,25이 timeout이 더 많이 등장함
-        error_type_vl_timeout = error_type_vl[:, 22] + error_type_vl[:, 24]
+    for idx, typecode,type, fwver, code in tqdm(id_err_var):
 
-        if type == 0:
-            # 방법 1 : 총 41 차원 : 39차원 + 2차원(34(com)/4,5,26(no_com))
-            error = np.concatenate((error_type_vl, error_type_vl_only_complainer.reshape((user_num, 1))), axis=1)
-
-        if type == 1:
-            # 방법 2 : 총 42 차원 : 39차원 + 2차원(34(com)/4,5,26(no_com)) + 1차원(23,25(timeout))
-            error = np.concatenate((error_type_vl, error_type_vl_only_complainer.reshape((user_num, 1)),
-                                    error_type_vl_timeout.reshape((user_num, 1))), axis=1)
-
-    if type == 2:
-        error_type3_vl = np.zeros((15000, 4))
-        # 총 4차원 : top(top_errtype6=[15,16,22,23,31,32]) + 2차원(34(com)/4,5,26(no_com)) + else
-
-        for person_idx, err in tqdm(error_type):
-            # 29개 위로는 29가 없기 때문에 1개씩 땡기고  36위로는 36이 없기 때문에 2개씩 땡겨야한다
-            if err in [15, 16, 22, 23, 31, 32]:
-                error_type3_vl[person_idx - 10000, 0] += 1
-            elif err == 34:
-                error_type3_vl[person_idx - 10000, 1] += 1
-            elif err in [4, 5, 26]:
-                error_type3_vl[person_idx - 10000, 2] += 1
-            else:
-                error_type3_vl[person_idx - 10000, 3] += 1
-        error = error_type3_vl
-
-
-    # model_nm
-    id_model = df[['user_id','model_nm']].values
-    model = np.zeros((user_num,9))
-
-    for idx, mol_nm in tqdm(id_model):  
-        model[idx-user_min,int(mol_nm[-1])-1] += 1
-
-    # errcode
-    # df.errcode.value_counts()[df.errcode.value_counts()>100000].keys()
-    errcode_top14 = ['1', '0', 'connection timeout', 'B-A8002', '80', '79', '14', 'active','2', '84', '85', 'standby', 'NFANDROID2','connection fail to establish']
-    id_code = df[['user_id','errcode']].values
-    code_df = np.zeros((user_num,14))
-
-    for idx, code in tqdm(id_code):
-        if code in errcode_top14:
-            code_df[idx-user_min,errcode_top14.index(code)] += 1
+        # type + code
+        if typecode in ['101','23connection fail to establish']:
+            typecode_arr[idx - user_min,0] += 1
+        elif typecode in ['40','332','261','141','151','161','111','121']:
+            typecode_arr[idx - user_min,1] += 1
         else:
-            pass
+            typecode_arr[idx - user_min,2] += 1
+        
+        # errtype
+        type_arr[idx - user_min,type - 1] += 1
 
-    return np.concatenate((error,model,code_df),axis=1)
+        if type in [25,18,20,19,21]:
+            type_arr[idx - user_min,42] += 1
+        elif type in [34,10,35,13,30]:
+            type_arr[idx - user_min,43] += 1
+        elif type in [12,37,36,11,16,15,33,26,2]:
+            type_arr[idx - user_min,44] += 1
+        elif type in [4,1,8]:
+            type_arr[idx - user_min,45] += 1
+        else:
+            type_arr[idx - user_min,46] += 1
 
-    
+        # fwver
+        fwver_dict = {'05.15.2138':0,'04.22.1750':1,'04.33.1261':2,'04.16.3553':3,'03.11.1167':4,'04.22.1778':5,'04.22.1684':6,'04.33.1185':7,'04.16.3571':8}
+        try:
+            fwver_arr[idx-user_min,fwver_dict[fwver]] += 1
+        except:
+            fwver_arr[idx-user_min,9] += 1
+
+        # errcode
+        errcode_top14 = ['1', '0', 'connection timeout', 'B-A8002', '80', '79', '14', 'active','2', '84', '85', 'standby', 'NFANDROID2','connection fail to establish']
+        if code in errcode_top14:
+            code_arr[idx-user_min,errcode_top14.index(code)] += 1
+        elif code in complainer_48h_errcode_unique_testtrain:
+            code_arr[idx-user_min,14] += 1
+        elif code in no_complainer_48h_errcode_unique_testtrain:
+            code_arr[idx-user_min,15] += 1
+        else:
+            code_arr[idx-user_min,16] += 1
+
+    # 변수 평균 분산 추가
+    type_mean = type_arr[:,0:42].mean(axis=1)
+    type_std = type_arr[:,0:42].std(axis=1)
+
+    typecode_mean = typecode_arr.mean(axis=1)
+    typecode_std = typecode_arr.std(axis=1)
+
+    fwver_arr_mean = fwver_arr.mean(axis=1)
+    fwver_arr_std = fwver_arr.std(axis=1)
+
+    code_mean = code_arr[:,:14].mean(axis=1)
+    code_std = code_arr[:,:14].std(axis=1)
+
+    mean_var = np.concatenate((type_mean.reshape(-1,1),type_std.reshape(-1,1),typecode_mean.reshape(-1,1),typecode_std.reshape(-1,1),fwver_arr_mean.reshape(-1,1),fwver_arr_std.reshape(-1,1),code_mean.reshape(-1,1),code_std.reshape(-1,1)),axis=1)
+
+    return np.concatenate((typecode_arr,type_arr,fwver_arr,code_arr,mean_var),axis=1)
+
 
 def mk_qt_feature(df,vars,user_num,user_min):
     q1 = np.zeros((user_num,6))
     q2 = np.zeros((user_num,6))
     q3 = np.zeros((user_num,1))
-    # for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
-    #     df[qual_num] = df[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
+    
+    for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
+        df[qual_num] = df[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
 
     # qt_cnt
     qt_cnt = df.groupby('user_id').count()['time']/12
@@ -126,13 +127,12 @@ def mk_qt_feature(df,vars,user_num,user_min):
                 res[int(idx)-user_min,4] += 1
             else:
                 res[int(idx)-user_min,5] += 1
+        q1 += res
 
-        if i in [0,1,2,4,6,9,10]:
-            q1 += res
-        else:
-            q2 += res
+        qt_mean = q1.mean(axis=1)
+        qt_var = q1.std(axis=1)
         
-    return np.concatenate((q1/7,q2/4,q3),axis=1)
+    return np.concatenate((q1/11,q3,qt_mean.reshape(-1,1),qt_var.reshape(-1,1)),axis=1)
 
 
 def make_datetime(x):
@@ -148,29 +148,46 @@ def make_datetime(x):
     return dt.datetime(year, month, day, hour)
 
 
+
 def mk_time_feature(df, user_num, user_min):
     # column return 추가 필요
 
     df['time'] = df['time'].map(lambda x: make_datetime(x))
 
-    df["hour"] = df["time"].dt.hour
+    # df["hour"] = df["time"].dt.hour
     df["dayofweek"] = df["time"].dt.dayofweek
 
-    # hour
-    hour_error = df[['user_id', 'hour']].values
-    hour = np.zeros((user_num, 24))
-
-    for person_idx, hr in tqdm(hour_error):
-        hour[person_idx - user_min, hr - 1] += 1
+    # # hour
+    # hour_error = df[['user_id', 'hour']].values
+    # hour = np.zeros((user_num, 24))
+    #
+    # for person_idx, hr in tqdm(hour_error):
+    #     hour[person_idx - user_min, hr - 1] += 1
 
     # day
     day_error = df[['user_id', 'dayofweek']].values
-    day = np.zeros((user_num, 7))
+    day = np.zeros((user_num, 4))
 
     for person_idx, d in tqdm(day_error):
-        day[person_idx - user_min, d - 1] += 1
+        if d == 1:
+            day[person_idx - user_min, 0] += 1
+        if d == 5:
+            day[person_idx - user_min, 1] += 1
+        if d == 6:
+            day[person_idx - user_min, 2] += 1
+        else:
+            day[person_idx - user_min, 3] += 1
 
-    return np.concatenate((hour, day), axis=1)
+    df_day = pd.DataFrame(day, columns=['Mon', 'Sat', 'Sun', 'others'])
+    df_day['all'] = df_day['Mon'] + df_day['Sat'] + df_day['Sun'] + df_day['others']
+
+    for var in ['Mon', 'Sat', 'Sun', 'others']:
+        df_day[var + '_pct'] = df_day[var] / df_day['all']
+
+    del df_day['all']
+
+    return df_day.values
+
 
 ## fwver_count
 def mk_fwver_feature(df,user_num,user_min):
@@ -185,6 +202,8 @@ def mk_fwver_feature(df,user_num,user_min):
         id +=1
         
     return fwver_count
+
+
 
 def mk_time_seg_feature(df, user_num, user_min):
     # column return 추가 필요
@@ -227,3 +246,33 @@ def mk_time_seg_feature(df, user_num, user_min):
         day_err[person_idx - user_min, day - 1] += 1
 
     return np.concatenate((hour_err, day_err), axis=1)
+
+
+
+def make_date(x):
+    # string 타입의 Time column을 datetime 타입으로 변경
+    x     = str(x)
+    year  = int(x[:4])
+    month = int(x[4:6])
+    day   = int(x[6:8])
+    return dt.datetime(year, month, day)
+
+
+
+def fill_quality_missing(df_err, df_quality):
+    df_err['time_day']  = df_err['time'].map(lambda x : make_date(x))
+    df_quality['time_day']  = df_err['time'].map(lambda x : make_date(x))
+
+    # #fwver 채우기
+    # for i in len(df_quality[df_quality['fwver'].isna()]):
+    #     df_quality[df_quality['fwver'].isna()][i]['fwver'] =  df_err[(df_err['user_id'] == df_quality[df_quality['fwver'].isna()][i]['user_id']) & (df_err['time_day'] ==df_quality[df_quality['fwver'].isna()][i]['time_day'])]['fwver'][0]
+
+
+    #quality_n 채우기
+    qual_list = ['quality_0', 'quality_1', 'quality_2', 'quality_5', 'quality_6', 'quality_7', 'quality_8', 'quality_9', 'quality_11', 'quality_12']
+    for i in qual_list:
+        df_quality[df_quality[i].isna()] = 0
+
+    df_quality[df_quality['quality_10'].isna()] = 3
+    
+    return df_quality

@@ -16,13 +16,16 @@ from sklearn.model_selection import KFold
 import warnings
 warnings.filterwarnings(action='ignore')
 
-from util import f_pr_auc, mk_err_feature, mk_qt_feature, mk_time_feature, mk_fwver_feature, mk_time_seg_feature
+from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing
 
-
+from scipy.stats import skew
+from scipy.stats import norm, kurtosis
 
 test_user_id_max = 44998
 test_user_id_min = 30000
 test_user_number = 14999
+
+
 
 def main(sub_name,duplicate=False,train=True,model='lgb'):
     ## data load 
@@ -32,27 +35,55 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
     train_problem  = pd.read_csv(PATH+'train_problem_data.csv')
     test_err  = pd.read_csv(PATH+'test_err_data.csv')
     test_quality  = pd.read_csv(PATH+'test_quality_data.csv')
-    
-    # 중복 제거
-    if duplicate:
-        train_err = train_err[train_err.duplicated()==False]
-        train_quality = train_quality[train_quality.duplicated()==False]
+    train_ngram = pd.read_csv(PATH+'train_ngram_feature.csv')
+    test_ngram = pd.read_csv(PATH+'test_feature.csv')
+
+
+    #결측치 채우기
+    # train_quality = fill_quality_missing(train_err, train_quality)
+    # test_quality = fill_quality_missing(test_err, test_quality)
+
+
+    ### errcode를 위한 전처리
+    train_err['time'] = pd.to_datetime(train_err['time'], format="%Y%m%d%H%M%S")
+    train_problem['time'] = pd.to_datetime(train_problem['time'], format="%Y%m%d%H%M%S")
+    train_err['is_complain'] = train_err['user_id'].isin(train_problem['user_id'])
+    complainer = train_err[train_err['is_complain']==True]
+    no_complainer = train_err[train_err['is_complain']==False]
+
+    complainer_48h_before = np.zeros((0,2))
+  
+    ### 신고시간 기준 24h이내 train_err (complainer_24h_before) 만들기
+    for id in train_problem.user_id.unique():
+      #print(id)
+      for time in train_problem[train_problem.user_id == id ].time:
+        time_48h_before_complain = time - dt.timedelta(days=2)
+        temp=(complainer[(complainer['user_id'] == id) & (complainer['time'] > time_48h_before_complain) & (complainer['time'] <= time)][['user_id','errcode']])
+        complainer_48h_before= np.concatenate([complainer_48h_before, temp])
+
+    complainer_48h_before = pd.DataFrame(complainer_48h_before , columns=['user_id','errcode'] )
+    ## 신고자, 비신고자만 가진 errcode set만들기
+    complainer_48h_errcode_unique = set(complainer_48h_before.errcode.unique()) - set(no_complainer.errcode.unique())
+    no_complainer_48h_errcode_unique = set(no_complainer.errcode.unique()) -set(complainer_48h_before.errcode.unique())
+    # 신고자, 비신고자만 가진  train, test에 모두 있는 errcode set만들기
+    complainer_48h_errcode_unique_testtrain = complainer_48h_errcode_unique.intersection(test_err.errcode.unique())
+    no_complainer_48h_errcode_unique_testtrain = no_complainer_48h_errcode_unique.intersection(test_err.errcode.unique())
 
 
     ## FE
-    err_train = mk_err_feature(train_err,15000,10000,0)
+    err_train = mk_err_feature(train_err,15000,10000,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
     q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
     err_fwver_train = mk_fwver_feature(train_err,15000,10000)
+    # quality_time_seg_train = mk_time_seg_feature(train_quality,15000,10000)
     # err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
-    quality_time_seg_train = mk_time_seg_feature(train_quality,15000,10000)
-    train_x = np.concatenate((err_train, q_train, err_fwver_train,quality_time_seg_train), axis=1)
-    
-    test_x = mk_err_feature(test_err, test_user_number,test_user_id_min,0)
+    train_x = np.concatenate((err_train, q_train, err_fwver_train), axis=1)
+
+    err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
     q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
     err_fwver_test = mk_fwver_feature(test_err, test_user_number,test_user_id_min)
     # err_time_seg_test = mk_time_seg_feature(test_err,test_user_number,test_user_id_min)
-    quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
-    test_x = np.concatenate((test_x, q_test, err_fwver_test,quality_time_seg_test), axis=1)
+    # quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
+    test_x = np.concatenate((err_test, q_test, err_fwver_test), axis=1)
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
@@ -60,6 +91,7 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
 
     print(train_x.shape)
     print(test_x.shape)
+
 
     ## modeling
     if train:
@@ -86,15 +118,12 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
                     x.append(1-predictions['Score'][i])
                     
             sample_submission['problem']=x
-            #sample_submission.head()
-            predictions = predict_model(final_model, data = test)
-            #sample_submission.to_csv("AutoML12.csv", index = False)
+
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
             sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
             
 
-            
         if model == 'lgb':
             models     = []
             recalls    = []
@@ -130,7 +159,7 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
                                     valid_sets      = d_val,
                                     feval           = f_pr_auc,
                                     verbose_eval    = 20, 
-                                    early_stopping_rounds = 50
+                                    early_stopping_rounds = 50,
                                 )
                 # cal valid prediction
                 valid_prob = model.predict(valid_x)
@@ -150,8 +179,6 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
 
             print(np.mean(auc_scores))
 
-
-    #if submit:
             # predict
             pred_y_lst = []
             for model in models:
@@ -164,7 +191,7 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
             sample_submission['problem'] = pred_ensemble.reshape(-1)
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
-            sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
+            tem.to_csv(f"submission/{sub_name}.csv", index = False)
 
 
 if __name__ == '__main__':
