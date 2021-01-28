@@ -13,6 +13,7 @@ import re
 from sklearn.metrics import *
 from sklearn.model_selection import KFold
 import warnings
+from collections import Counter, defaultdict
 warnings.filterwarnings(action='ignore')
 
 
@@ -153,24 +154,39 @@ def mk_time_feature(df, user_num, user_min):
 
     df['time'] = df['time'].map(lambda x: make_datetime(x))
 
-    df["hour"] = df["time"].dt.hour
+    # df["hour"] = df["time"].dt.hour
     df["dayofweek"] = df["time"].dt.dayofweek
 
-    # hour
-    hour_error = df[['user_id', 'hour']].values
-    hour = np.zeros((user_num, 24))
-
-    for person_idx, hr in tqdm(hour_error):
-        hour[person_idx - user_min, hr - 1] += 1
+    # # hour
+    # hour_error = df[['user_id', 'hour']].values
+    # hour = np.zeros((user_num, 24))
+    #
+    # for person_idx, hr in tqdm(hour_error):
+    #     hour[person_idx - user_min, hr - 1] += 1
 
     # day
     day_error = df[['user_id', 'dayofweek']].values
-    day = np.zeros((user_num, 7))
+    day = np.zeros((user_num, 4))
 
     for person_idx, d in tqdm(day_error):
-        day[person_idx - user_min, d - 1] += 1
+        if d == 1:
+            day[person_idx - user_min, 0] += 1
+        if d == 5:
+            day[person_idx - user_min, 1] += 1
+        if d == 6:
+            day[person_idx - user_min, 2] += 1
+        else:
+            day[person_idx - user_min, 3] += 1
 
-    return np.concatenate((hour, day), axis=1)
+    df_day = pd.DataFrame(day, columns=['Mon', 'Sat', 'Sun', 'others'])
+    df_day['all'] = df_day['Mon'] + df_day['Sat'] + df_day['Sun'] + df_day['others']
+
+    for var in ['Mon', 'Sat', 'Sun', 'others']:
+        df_day[var + '_pct'] = df_day[var] / df_day['all']
+
+    del df_day['all']
+
+    return df_day.values
 
 ## fwver_count
 def mk_fwver_feature(df,user_num,user_min):
