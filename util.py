@@ -22,7 +22,7 @@ def f_pr_auc(probas_pred, y_true):
     score=auc(r,p) 
     return "pr_auc", score, True
 
-def mk_err_feature(df,user_num,user_min):
+def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain):
     # errtype
     id_error = df[['user_id','errtype']].values
     error = np.zeros((user_num,42))
@@ -39,15 +39,25 @@ def mk_err_feature(df,user_num,user_min):
 
     # errcode
     # df.errcode.value_counts()[df.errcode.value_counts()>100000].keys()
+
+    ## top14 + 신고 48h 전/ errtype, train test모두 있는/ 신고자, 비신고자가 유일하게 가진 errcode count
     errcode_top14 = ['1', '0', 'connection timeout', 'B-A8002', '80', '79', '14', 'active','2', '84', '85', 'standby', 'NFANDROID2','connection fail to establish']
     id_code = df[['user_id','errcode']].values
-    code_df = np.zeros((user_num,14))
+    code_df = np.zeros((user_num, 16))
 
     for idx, code in tqdm(id_code):
         if code in errcode_top14:
             code_df[idx-user_min,errcode_top14.index(code)] += 1
+
+        elif code in complainer_48h_errcode_unique_testtrain:
+           code_df[idx-user_min,14] += 1
+
+        elif code in no_complainer_48h_errcode_unique_testtrain:
+            code_df[idx-user_min,15] += 1
+
         else:
             pass
+
 
     return np.concatenate((error,model,code_df),axis=1)
 
