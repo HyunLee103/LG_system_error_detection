@@ -25,9 +25,13 @@ test_user_id_max = 44998
 test_user_id_min = 30000
 test_user_number = 14999
 
+train_user_id_max = 24999
+train_user_id_min = 10000
+train_user_number = 15000
 
 
-def main(sub_name,duplicate=False,train=True,model='lgb'):
+
+def main(sub_name,train=True,split=False,model='lgb'):
     ## data load 
     PATH = "data/"
     train_err  = pd.read_csv(PATH+'train_err_data.csv')
@@ -91,11 +95,104 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
 
     print(train_x.shape)
     print(test_x.shape)
+    
+    if split:
+        quality_train_user_id = train_quality['user_id'].unique()
+        quality_train_user_id = quality_train_user_id-train_user_id_min
+        quality_train_user_id
+        quality_train_user_id = quality_train_user_id.tolist()
 
 
+        nonquality_train_user_id = []
+        for i in range(train_user_number):
+            nonquality_train_user_id.append(i)
+        for i in quality_train_user_id:
+            nonquality_train_user_id.remove(i)
+            
+        quality_test_user_id = test_quality['user_id'].unique()
+        quality_test_user_id = quality_test_user_id-test_user_id_min
+        quality_test_user_id
+        quality_test_user_id = quality_test_user_id.tolist()
+        
+        nonquality_test_user_id = []
+        for i in range(test_user_number):
+            nonquality_test_user_id.append(i)
+        for i in quality_test_user_id:
+            nonquality_test_user_id.remove(i)
+        
+        train_x2 = np.concatenate((err_train, q_train, err_fwver_train), axis=1)
+        test_x2 = np.concatenate((test_x, q_test, err_fwver_test), axis=1)
+        qua_train_x = train_x[quality_train_user_id]
+        nonqua_train_x = train_x2[nonquality_train_user_id]
+        print(qua_train_x.shape)
+        print(nonqua_train_x.shape)
+        
+        qua_test_x = test_x[quality_test_user_id]
+        nonqua_test_x = test_x2[nonquality_test_user_id]
+        
+        qua_train_y = train_y[quality_train_user_id]
+        nonqua_train_y = train_y[nonquality_train_user_id]
+        
     ## modeling
     if train:
         if model == 'automl':
+            if split:
+                # quality_id
+                train = pd.DataFrame(data=qua_train_x)
+                train['problem'] = qua_train_y
+                clf = setup(data = train, target = 'problem', session_id = 123) 
+                best_5 = compare_models(sort = 'AUC', n_select = 5)
+                blended = blend_models(estimator_list = best_5, fold = 5, method = 'soft')
+                pred_holdout = predict_model(blended)
+                final_model = finalize_model(blended)
+                
+                ## test
+                test = pd.DataFrame(data=test_x)
+                qua_predictions = predict_model(final_model, data = test)
+                
+                
+                #nonquality_id
+                train = pd.DataFrame(data=nonqua_train_x)
+                train['problem'] = nonqua_train_y
+                clf = setup(data = train, target = 'problem', session_id = 123) 
+                best_5_2 = compare_models(sort = 'AUC', n_select = 5)
+                blended_2 = blend_models(estimator_list = best_5_2, fold = 5, method = 'soft')
+                pred_holdout = predict_model(blended_2)
+                final_model = finalize_model(blended_2)
+                test_2 = pd.DataFrame(data=nonqua_test_x)
+                nonqua_predictions = predict_model(final_model, data = test_2)
+                
+                sample_submission  = pd.read_csv(PATH+"sample_submission.csv")
+                qua_x = []
+                for i in range(len(qua_predictions['Score'])):
+                    if qua_predictions['Label'][i] =='1.0':
+                        qua_x.append(qua_predictions['Score'][i])
+                    else:
+                        qua_x.append(1-qua_predictions['Score'][i])
+                nonqua_x = []
+                for i in range(len(nonqua_predictions['Score'])):
+                    if nonqua_predictions['Label'][i] =='1.0':
+                        nonqua_x.append(nonqua_predictions['Score'][i])
+                    else:
+                        nonqua_x.append(1-nonqua_predictions['Score'][i])
+                        
+                final_prediction = [0 for i in range(test_user_number)]
+                id = 0
+                for i in quality_test_user_id:
+                    final_prediction[i] = qua_x[id]
+                    id +=1
+                
+                id = 0
+                for i in nonquality_test_user_id:
+                    final_prediction[i] = nonqua_x[id]
+                    id +=1
+                    
+                sample_submission['problem'] = final_prediction
+                if not os.path.exists('submission'):
+                    os.makedirs(os.path.join('submission'))
+                sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
+                
+    
             train = pd.DataFrame(data=train_x)
             train['problem'] = problem
             clf = setup(data = train, target = 'problem', session_id = 123) 
@@ -191,8 +288,8 @@ def main(sub_name,duplicate=False,train=True,model='lgb'):
             sample_submission['problem'] = pred_ensemble.reshape(-1)
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
-            tem.to_csv(f"submission/{sub_name}.csv", index = False)
+            sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
 
 
 if __name__ == '__main__':
-    main('newbase_errtype0_lgbm')
+    main('test')

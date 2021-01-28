@@ -13,6 +13,7 @@ import re
 from sklearn.metrics import *
 from sklearn.model_selection import KFold
 import warnings
+from collections import Counter, defaultdict
 warnings.filterwarnings(action='ignore')
 
 
@@ -188,7 +189,6 @@ def mk_time_feature(df, user_num, user_min):
 
     return df_day.values
 
-
 ## fwver_count
 def mk_fwver_feature(df,user_num,user_min):
     df = df.groupby(['user_id', 'model_nm'])
@@ -246,7 +246,6 @@ def mk_time_seg_feature(df, user_num, user_min):
         day_err[person_idx - user_min, day - 1] += 1
 
     return np.concatenate((hour_err, day_err), axis=1)
-
 
 
 def make_date(x):
