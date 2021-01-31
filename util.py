@@ -32,7 +32,7 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
     # 빈 array 생성
     typecode_arr = np.zeros((user_num,3))
     type_arr = np.zeros((user_num,47))
-    fwver_arr = np.zeros((user_num,10))
+    fwver_arr = np.zeros((user_num,13))
     code_arr = np.zeros((user_num, 17))
 
     for idx, typecode,type, fwver, code in tqdm(id_err_var):
@@ -42,22 +42,21 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
             typecode_arr[idx - user_min,0] += 1
         elif typecode in ['40','332','261','141','151','161','111','121']:
             typecode_arr[idx - user_min,1] += 1
-        else:
-            typecode_arr[idx - user_min,2] += 1
+
+        typecode_arr[idx - user_min,2] = (typecode_arr[idx - user_min,0]+1)/(typecode_arr[idx - user_min,1]+1)
         
         # errtype
         type_arr[idx - user_min,type - 1] += 1
 
         if type in [25,18,20,19,21]:
             type_arr[idx - user_min,42] += 1
-        elif type in [34,10,35,13,30]:
+        elif type in [34,10,35,13,30,27,28]:
             type_arr[idx - user_min,43] += 1
-        elif type in [12,37,36,11,16,15,33,26,2]:
+        elif type in [2,4,42,26]:
             type_arr[idx - user_min,44] += 1
-        elif type in [4,1,8]:
+        elif type in [1,8]:
             type_arr[idx - user_min,45] += 1
-        else:
-            type_arr[idx - user_min,46] += 1
+        type_arr[idx - user_min,46] = (type_arr[idx - user_min,42]+1)/(type_arr[idx - user_min,45]+1)   
 
         # fwver
         fwver_dict = {'05.15.2138':0,'04.22.1750':1,'04.33.1261':2,'04.16.3553':3,'03.11.1167':4,'04.22.1778':5,'04.22.1684':6,'04.33.1185':7,'04.16.3571':8}
@@ -66,47 +65,54 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
         except:
             fwver_arr[idx-user_min,9] += 1
 
+        if fwver in ['04.33.1149','04.73.2571','04.16.3571']:
+            fwver_arr[idx-user_min,10] += 1
+        elif fwver in ['05.15.2120','10']:
+            fwver_arr[idx-user_min,11] += 1
+        elif fwver in ['04.73.2237','04.22.1684','05.15.2138']:
+            fwver_arr[idx-user_min,12] += 1
+
         # errcode
         errcode_top14 = ['1', '0', 'connection timeout', 'B-A8002', '80', '79', '14', 'active','2', '84', '85', 'standby', 'NFANDROID2','connection fail to establish']
         if code in errcode_top14:
             code_arr[idx-user_min,errcode_top14.index(code)] += 1
-        elif code in complainer_48h_errcode_unique_testtrain:
+        elif code in list(complainer_48h_errcode_unique_testtrain)+['5','6','V-21008','terminate by peer user']:
             code_arr[idx-user_min,14] += 1
-        elif code in no_complainer_48h_errcode_unique_testtrain:
+        # elif code in ['H-51042','connection fail to establish','4','14','13','83','3','connection timeout']:
+        #     code_arr[idx-user_min,15] += 1
+        elif code in list(no_complainer_48h_errcode_unique_testtrain)+['Q-64002','S-65002','0']:
             code_arr[idx-user_min,15] += 1
-        else:
-            code_arr[idx-user_min,16] += 1
+        code_arr[idx-user_min,16] = (code_arr[idx-user_min,14]+1)/(code_arr[idx-user_min,15]+1)
 
     # 변수 평균 분산 추가
-    type_mean = type_arr[:,0:42].mean(axis=1)
-    type_std = type_arr[:,0:42].std(axis=1)
+    type_mean = type_arr[:,42:].mean(axis=1)
+    type_std = type_arr[:,42:].std(axis=1)
 
     typecode_mean = typecode_arr.mean(axis=1)
     typecode_std = typecode_arr.std(axis=1)
 
-    fwver_arr_mean = fwver_arr.mean(axis=1)
-    fwver_arr_std = fwver_arr.std(axis=1)
+    fwver_arr_mean = fwver_arr[:,9:].mean(axis=1)
+    fwver_arr_std = fwver_arr[:,9:].std(axis=1)
 
     code_mean = code_arr[:,:14].mean(axis=1)
     code_std = code_arr[:,:14].std(axis=1)
 
     mean_var = np.concatenate((type_mean.reshape(-1,1),type_std.reshape(-1,1),typecode_mean.reshape(-1,1),typecode_std.reshape(-1,1),fwver_arr_mean.reshape(-1,1),fwver_arr_std.reshape(-1,1),code_mean.reshape(-1,1),code_std.reshape(-1,1)),axis=1)
 
-    return np.concatenate((typecode_arr,type_arr,fwver_arr,code_arr,mean_var),axis=1)
+    return np.concatenate((typecode_arr,type_arr,fwver_arr,code_arr),axis=1)
 
 
 def mk_qt_feature(df,vars,user_num,user_min):
-    q1 = np.zeros((user_num,6))
-    q2 = np.zeros((user_num,6))
-    q3 = np.zeros((user_num,1))
-    
+
     for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
         df[qual_num] = df[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
 
-    # qt_cnt
+    q1 = np.zeros((user_num,6))
+    q2 = np.zeros((user_num,6))
+    q3 = np.zeros((user_num,1))
     qt_cnt = df.groupby('user_id').count()['time']/12
     dict = {key:value for key,value in zip(qt_cnt.index,qt_cnt.values)}
-    for i in range(15000):
+    for i in range(user_num):
         if i+user_min in dict.keys():
             q3[i,0] = dict[i+user_min]
 
@@ -132,6 +138,8 @@ def mk_qt_feature(df,vars,user_num,user_min):
 
         qt_mean = q1.mean(axis=1)
         qt_var = q1.std(axis=1)
+
+        # q1 = q1/q1.sum(axis=1).shape(-1,1)
         
     return np.concatenate((q1/11,q3,qt_mean.reshape(-1,1),qt_var.reshape(-1,1)),axis=1)
 
@@ -259,8 +267,8 @@ def make_date(x):
 
 
 def fill_quality_missing(df_err, df_quality):
-    df_err['time_day']  = df_err['time'].map(lambda x : make_date(x))
-    df_quality['time_day']  = df_err['time'].map(lambda x : make_date(x))
+    # df_err['time_day']  = df_err['time'].map(lambda x : make_date(x))
+    # df_quality['time_day']  = df_err['time'].map(lambda x : make_date(x))
 
     # #fwver 채우기
     # for i in len(df_quality[df_quality['fwver'].isna()]):
@@ -270,9 +278,9 @@ def fill_quality_missing(df_err, df_quality):
     #quality_n 채우기
     qual_list = ['quality_0', 'quality_1', 'quality_2', 'quality_5', 'quality_6', 'quality_7', 'quality_8', 'quality_9', 'quality_11', 'quality_12']
     for i in qual_list:
-        df_quality[df_quality[i].isna()] = 0
+        df_quality[i].fillna(0)
 
-    df_quality[df_quality['quality_10'].isna()] = 3
+    df_quality['qulity_10'].fillna(3)
     
     return df_quality
 
@@ -290,6 +298,7 @@ def err_count(df,user_num, df_cat):
         #test_x3.shape
         
     return output
+
 
 def qua_count(df,user_num, user_min,qt_id, noqt_id):
     qua_count = df.groupby('user_id')['user_id'].count()/12

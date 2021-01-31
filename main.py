@@ -8,7 +8,6 @@ from pycaret.classification import *
 
 from tqdm import tqdm
 import gc
-import random
 import lightgbm as lgb
 import re
 from sklearn.metrics import *
@@ -16,7 +15,7 @@ from sklearn.model_selection import KFold
 import warnings
 warnings.filterwarnings(action='ignore')
 
-from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing
+from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count
 
 from scipy.stats import skew
 from scipy.stats import norm, kurtosis
@@ -29,18 +28,8 @@ train_user_id_max = 24999
 train_user_id_min = 10000
 train_user_number = 15000
 
-train_qt_id = set(train_quality.user_id) # 8281
-train_err_id = set(train_err.user_id)
-train_noqt_id = train_err_id - train_qt_id
 
-test_qt_id = set(test_quality.user_id) 
-test_err_id = set(test_err.user_id)
-test_noqt_id = test_err_id - test_qt_id
 
-train_qt_id = sorted(train_qt_id)
-train_noqt_id = sorted(train_noqt_id)
-test_qt_id = sorted(test_qt_id)
-test_noqt_id = sorted(test_noqt_id)
 
 def main(sub_name,train=True,split=False,model='lgb'):
     ## data load 
@@ -50,13 +39,19 @@ def main(sub_name,train=True,split=False,model='lgb'):
     train_problem  = pd.read_csv(PATH+'train_problem_data.csv')
     test_err  = pd.read_csv(PATH+'test_err_data.csv')
     test_quality  = pd.read_csv(PATH+'test_quality_data.csv')
-    train_ngram = pd.read_csv(PATH+'train_ngram_feature.csv')
-    test_ngram = pd.read_csv(PATH+'test_feature.csv')
 
+    train_qt_id = set(train_quality.user_id) # 8281
+    train_err_id = set(train_err.user_id)
+    train_noqt_id = train_err_id - train_qt_id
 
-    #결측치 채우기
-    # train_quality = fill_quality_missing(train_err, train_quality)
-    # test_quality = fill_quality_missing(test_err, test_quality)
+    test_qt_id = set(test_quality.user_id) 
+    test_err_id = set(test_err.user_id)
+    test_noqt_id = test_err_id - test_qt_id
+
+    train_qt_id = sorted(train_qt_id)
+    train_noqt_id = sorted(train_noqt_id)
+    test_qt_id = sorted(test_qt_id)
+    test_noqt_id = sorted(test_noqt_id)
 
 
     ### errcode를 위한 전처리
@@ -92,9 +87,10 @@ def main(sub_name,train=True,split=False,model='lgb'):
     # quality_time_seg_train = mk_time_seg_feature(train_quality,15000,10000)
     # err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
     err_train_count = err_count(train_err,15000,'train')
-    qua_train_count = qua_count(train_quality,15000, 10000,train_qt_id, train_noqt_id)
+    # qua_train_count = qua_count(train_quality,15000, 10000,train_qt_id, train_noqt_id)
     
-    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count, qua_train_count), axis=1)
+    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count), axis=1)
+
 
     err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
     q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
@@ -102,9 +98,11 @@ def main(sub_name,train=True,split=False,model='lgb'):
     # err_time_seg_test = mk_time_seg_feature(test_err,test_user_number,test_user_id_min)
     # quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
     err_test_count = err_count(test_err,test_user_number,'test')
-    qua_test_count = qua_count(train_quality,test_user_number,test_user_id_min,test_qt_id, test_noqt_id)
+    # qua_test_count = qua_count(train_quality,test_user_number,test_user_id_min,test_qt_id, test_noqt_id)
+
     
-    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count, qua_test_count), axis=1)
+    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count), axis=1)
+
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
@@ -112,6 +110,9 @@ def main(sub_name,train=True,split=False,model='lgb'):
 
     print(train_x.shape)
     print(test_x.shape)
+
+    pd.DataFrame(train_x).to_csv('train_x_83.csv')
+    pd.DataFrame(test_x).to_csv('test_x_83.csv')
     
     if split:
         quality_train_user_id = train_quality['user_id'].unique()
@@ -235,7 +236,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
 
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
-            sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
+            sample_submission.to_csv(f"submission/30.csv", index = False)
             
 
         if model == 'lgb':
@@ -302,11 +303,15 @@ def main(sub_name,train=True,split=False,model='lgb'):
 
             # submit
             sample_submission = pd.read_csv(PATH+'sample_submission.csv')
-            sample_submission['problem'] = pred_ensemble.reshape(-1)
+            sample_submission['problem'] = tem
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
-            sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
+            sample_submission.to_csv(f"submission/28_19_24Ensemble.csv", index = False)
 
 
 if __name__ == '__main__':
     main('test')
+
+
+
+
