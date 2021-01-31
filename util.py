@@ -275,3 +275,33 @@ def fill_quality_missing(df_err, df_quality):
     df_quality[df_quality['quality_10'].isna()] = 3
     
     return df_quality
+
+
+def err_count(df,user_num, df_cat):
+    if df_cat == 'train':
+        n_total_train = df.groupby('user_id')['user_id'].count()
+        #print(n_total_train.shape)
+        output= np.array(n_total_train).reshape(user_num,1)
+    else:
+        n_total_test = df.groupby('user_id')['user_id'].count()
+        total_test_list = n_total_test.tolist()
+        total_test_list.insert(13262,0)
+        output= np.array(total_test_list).reshape(user_num,1)
+        #test_x3.shape
+        
+    return output
+
+def qua_count(df,user_num, user_min,qt_id, noqt_id):
+    qua_count = df.groupby('user_id')['user_id'].count()/12
+    qua_count_mean = qua_count.mean()
+    qua_count_list = [0 for i in range(user_num)]
+    
+    id=0
+    for i in qt_id:
+        i = i-user_min
+        qua_count_list[i] = qua_count.iloc[id]
+        id+=1
+    for i in noqt_id:
+        i = i-user_min
+        qua_count_list[i] = qua_count_mean
+    return np.array(qua_count_list).reshape(user_num,1)

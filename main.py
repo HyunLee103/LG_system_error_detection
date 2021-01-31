@@ -29,7 +29,18 @@ train_user_id_max = 24999
 train_user_id_min = 10000
 train_user_number = 15000
 
+train_qt_id = set(train_quality.user_id) # 8281
+train_err_id = set(train_err.user_id)
+train_noqt_id = train_err_id - train_qt_id
 
+test_qt_id = set(test_quality.user_id) 
+test_err_id = set(test_err.user_id)
+test_noqt_id = test_err_id - test_qt_id
+
+train_qt_id = sorted(train_qt_id)
+train_noqt_id = sorted(train_noqt_id)
+test_qt_id = sorted(test_qt_id)
+test_noqt_id = sorted(test_noqt_id)
 
 def main(sub_name,train=True,split=False,model='lgb'):
     ## data load 
@@ -80,14 +91,20 @@ def main(sub_name,train=True,split=False,model='lgb'):
     err_fwver_train = mk_fwver_feature(train_err,15000,10000)
     # quality_time_seg_train = mk_time_seg_feature(train_quality,15000,10000)
     # err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
-    train_x = np.concatenate((err_train, q_train, err_fwver_train), axis=1)
+    err_train_count = err_count(train_err,15000,'train')
+    qua_train_count = qua_count(train_quality,15000, 10000,train_qt_id, train_noqt_id)
+    
+    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count, qua_train_count), axis=1)
 
     err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
     q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
     err_fwver_test = mk_fwver_feature(test_err, test_user_number,test_user_id_min)
     # err_time_seg_test = mk_time_seg_feature(test_err,test_user_number,test_user_id_min)
     # quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
-    test_x = np.concatenate((err_test, q_test, err_fwver_test), axis=1)
+    err_test_count = err_count(test_err,test_user_number,'test')
+    qua_test_count = qua_count(train_quality,test_user_number,test_user_id_min,test_qt_id, test_noqt_id)
+    
+    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count, qua_test_count), axis=1)
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
