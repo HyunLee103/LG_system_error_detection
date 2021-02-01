@@ -154,10 +154,9 @@ def make_datetime(x):
     return dt.datetime(year, month, day, hour)
 
 
-
 def mk_time_feature(df, user_num, user_min):
-    # column return 추가 필요
-
+    # hour 구간  count 4개 비율 4개
+    # day 구간 count 4개 비율  4개
     df['time'] = df['time'].map(lambda x: make_datetime(x))
 
     # df["hour"] = df["time"].dt.hour
@@ -169,6 +168,30 @@ def mk_time_feature(df, user_num, user_min):
     #
     # for person_idx, hr in tqdm(hour_error):
     #     hour[person_idx - user_min, hr - 1] += 1
+
+    df["hour"] = df["time"].dt.hour
+    conditionlist = [
+        (df['hour'] >= 11) & (df['hour'] < 14),
+        (df['hour'] >= 14) & (df['hour'] < 20),
+        (df['hour'] >= 20) & (df['hour'] < 24) | (df['hour'] == 0)]
+
+    choicelist = [0, 1, 2]  # lunch :0, Afternoon:1 , Night : 2, others : 3
+    df['hour_segment'] = np.select(conditionlist, choicelist, default=3)
+
+    df_time_err = pd.concat([df['user_id'], df['hour_segment']], axis=1).values
+
+    hour_err = np.zeros((user_num, 8))
+
+    print('hour_Err shape', hour_err.shape)
+    print('train_time_err shape', df_time_err.shape)
+
+    for person_idx, hr in tqdm(df_time_err):
+        hour_err[person_idx - user_min, hr - 1] += 1
+
+    hour_err_sum = np.sum(hour_err, axis=1)
+
+    for num in range(4):
+        hour_err[:, num + 4] = hour_err[:, num] / hour_err_sum
 
     # day
     day_error = df[['user_id', 'dayofweek']].values
@@ -192,7 +215,7 @@ def mk_time_feature(df, user_num, user_min):
 
     del df_day['all']
 
-    return df_day.values
+    return np.concatenate((hour_err, df_day.values), axis=1)
 
 ## fwver_count
 def mk_fwver_feature(df,user_num,user_min):
@@ -210,47 +233,6 @@ def mk_fwver_feature(df,user_num,user_min):
 
 
 
-def mk_time_seg_feature(df, user_num, user_min):
-    # column return 추가 필요
-
-    df['time'] = df['time'].map(lambda x: make_datetime(x))
-
-    df["hour"] = df["time"].dt.hour
-    conditionlist = [
-        (df['hour'] >= 11) & (df['hour'] < 14),
-        (df['hour'] >= 14) & (df['hour'] < 20),
-        (df['hour'] >= 20) & (df['hour'] < 24) | (df['hour'] == 0)]
-
-    choicelist = [0, 1, 2]  # lunch :0, Afternoon:1 , Night : 2, others : 3
-    df['hour_segment'] = np.select(conditionlist, choicelist, default=3)
-
-    train_time_err = pd.concat([df['user_id'], df['hour_segment']], axis=1).values
-
-    hour_err = np.zeros((user_num, 4))
-
-    print('hour_Err shape', hour_err.shape)
-    print('train_time_err shape', train_time_err.shape)
-
-    for person_idx, hr in tqdm(train_time_err):
-        hour_err[person_idx - user_min, hr - 1] += 1
-
-    df["dayofweek"] = df["time"].dt.dayofweek
-
-    conditionlist = [
-        (df['dayofweek'] >= 1) & (df['hour'] < 5),
-        (df['dayofweek'] >= 5) & (df['hour'] < 7)]
-
-    choicelist = [0, 1]  # weekday : 0 ,weekend: 1, monday:2
-    df['day_seg'] = np.select(conditionlist, choicelist, default=2)
-
-    train_day_err = pd.concat([df['user_id'], df['day_seg']], axis=1).values
-
-    day_err = np.zeros((user_num, 3))
-
-    for person_idx, day in tqdm(train_day_err):
-        day_err[person_idx - user_min, day - 1] += 1
-
-    return np.concatenate((hour_err, day_err), axis=1)
 
 
 def make_date(x):
