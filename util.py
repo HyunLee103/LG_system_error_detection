@@ -16,6 +16,9 @@ import warnings
 from collections import Counter, defaultdict
 warnings.filterwarnings(action='ignore')
 
+from scipy.stats import skew
+from scipy.stats import norm, kurtosis
+
 
 def f_pr_auc(probas_pred, y_true):
     labels=y_true.get_label()
@@ -154,9 +157,11 @@ def make_datetime(x):
     return dt.datetime(year, month, day, hour)
 
 
-def mk_time_feature(df, user_num, user_min):
-    # hour 구간  count 4개 비율 4개
-    # day 구간 count 4개 비율  4개
+def mk_time_feature(df, user_num, user_min,err_mode=True):
+    # hour 구간  count 4개 비율 4개 총 8개
+    # day 구간 count 4개 비율  4개 총 8개
+    # err은 일자별 error statics 6개
+    # qual: 16개/err : 22개
     df['time'] = df['time'].map(lambda x: make_datetime(x))
 
     # df["hour"] = df["time"].dt.hour
@@ -215,7 +220,18 @@ def mk_time_feature(df, user_num, user_min):
 
     del df_day['all']
 
-    return np.concatenate((hour_err, df_day.values), axis=1)
+    df_day_val = df_day.values
+    if err_mode :
+        err_date = df.groupby([df['user_id'],df['time'].dt.date]).size().reset_index(name='counts')
+        err_time_stat = err_date.groupby('user_id').agg({'counts': [np.min, np.max, np.mean, np.std, skew,np.size]}).reset_index()
+        err_time_stat.columns = ['user_id', 'time_min', 'time_max', 'time_mean', 'time_std', 'time_skew','time_count']
+        err_time_stat.time_std = err_time_stat.time_std.fillna(0)
+        err_time_stat.drop('user_id', axis=1, inplace=True)
+        err_time_val = err_time_stat.values
+
+        return np.concatenate((hour_err, df_day_val,err_time_val), axis=1)
+    else:
+        return np.concatenate((hour_err, df_day_val), axis=1)
 
 ## fwver_count
 def mk_fwver_feature(df,user_num,user_min):

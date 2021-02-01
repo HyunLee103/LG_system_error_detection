@@ -17,8 +17,6 @@ warnings.filterwarnings(action='ignore')
 
 from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count,qual_change,qual_statics,mk_time_feature
 
-from scipy.stats import skew
-from scipy.stats import norm, kurtosis
 
 test_user_id_max = 44998
 test_user_id_min = 30000
