@@ -16,8 +16,6 @@ import warnings
 from collections import Counter, defaultdict
 warnings.filterwarnings(action='ignore')
 
-from scipy.stats import norm, skew
-import numpy as np
 
 def f_pr_auc(probas_pred, y_true):
     labels=y_true.get_label()
@@ -156,11 +154,9 @@ def make_datetime(x):
     return dt.datetime(year, month, day, hour)
 
 
-def mk_time_feature(df, user_num, user_min,err_mode=True):
-    # hour 구간  count 4개 비율 4개 총 8개
-    # day 구간 count 4개 비율  4개 총 8개
-    # err은 일자별 error statics 6개
-    # qual: 16개/err : 22개
+def mk_time_feature(df, user_num, user_min):
+    # hour 구간  count 4개 비율 4개
+    # day 구간 count 4개 비율  4개
     df['time'] = df['time'].map(lambda x: make_datetime(x))
 
     # df["hour"] = df["time"].dt.hour
@@ -219,18 +215,7 @@ def mk_time_feature(df, user_num, user_min,err_mode=True):
 
     del df_day['all']
 
-    df_day_val = df_day.values
-    if err_mode :
-        err_date = df.groupby([df['user_id'],df['time'].dt.date]).size().reset_index(name='counts')
-        err_time_stat = err_date.groupby('user_id').agg({'counts': [np.min, np.max, np.mean, np.std, skew,np.size]}).reset_index()
-        err_time_stat.columns = ['user_id', 'time_min', 'time_max', 'time_mean', 'time_std', 'time_skew','time_count']
-        err_time_stat.time_std = err_time_stat.time_std.fillna(0)
-        err_time_stat.drop('user_id', axis=1, inplace=True)
-        err_time_val = err_time_stat.values
-
-        return np.concatenate((hour_err, df_day_val,err_time_val), axis=1)
-    else:
-        return np.concatenate((hour_err, df_day_val), axis=1)
+    return np.concatenate((hour_err, df_day.values), axis=1)
 
 ## fwver_count
 def mk_fwver_feature(df,user_num,user_min):
@@ -321,7 +306,8 @@ def qual_change(df, user_num, user_min):
 def qual_statics(df, user_count, user_min):
     # quality 11개 별 4개의 statics : 44개변수
     # -1의 갯수와 비율 2개
-    # 총 46개
+    # 12개, 24개, 24/12 비율
+    # 총 49개
     for x in range(0,13):
         if x == 3 or x==4:
             pass
@@ -340,8 +326,7 @@ def qual_statics(df, user_count, user_min):
     qual_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_count)]})
 
     col = 'quality_1'
-    print(col)
-    q1_minus1_cnt = df[df[col] == -1 ].groupby('user_id').count()[col]
+    q1_minus1_cnt = df[df[col] == -1 ].groupby('user_id').count()[col] 
     q1_minus1_cnt = q1_minus1_cnt.reset_index("user_id")
     q1_minus1_cnt_done = pd.merge(qual_num,q1_minus1_cnt,on='user_id',how='left')
     q1_minus1_cnt_done = q1_minus1_cnt_done.fillna(0)
@@ -349,18 +334,55 @@ def qual_statics(df, user_count, user_min):
     # print(q1_minus1_cnt_np)
 
     ##quality_1에서 -1 비율
-    qual_cnt = df.groupby('user_id').count()[col]
+    qual_cnt = df.groupby('user_id').count()[col] 
     qual_cnt = qual_cnt.reset_index("user_id")
     qual_cnt.rename(columns = {col : col+'count'}, inplace = True)
     qual_cnt_done = pd.merge(qual_num,qual_cnt,on='user_id',how='left')
 
-    q1_minus1_cnt_done[col+'_rate'] = q1_minus1_cnt_done[col] / qual_cnt_done[col+'count']
+    q1_minus1_cnt_done[col+'_rate'] = q1_minus1_cnt_done[col] / qual_cnt_done[col+'count'] 
     q1_minus1_cnt_done[col+'_rate'] = q1_minus1_cnt_done[col+'_rate'].fillna(0)
     # q1_minus1_rate_np = q1_minus1_rate.drop('user_id',axis=1)
     qual_num = q1_minus1_cnt_done
-    print(qual_num)
 
     # print(qual_num)
     qual_num.drop('user_id',axis=1,inplace=True)
     qual_minus_val = qual_num.values
-    return np.concatenate((qual_val_all,qual_minus_val),axis=1)
+
+    qual_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_count)]})
+    #qual_num = pd.DataFrame(data={'user_id': [num for num in range(10000,25000)]})
+
+    temp = df.groupby(['user_id','time']).count()
+
+    quality_12= temp.reset_index()[temp.reset_index().fwver==12].user_id.value_counts()
+
+    quality_12_df = quality_12.to_frame()
+    quality_12_df = quality_12_df.reset_index()
+    quality_12_df = quality_12_df.rename(columns = {'index' :'user_id','user_id':'counts'})
+    quality_12_sum = quality_12_df.counts.sum()
+    qual_12 = pd.merge(qual_num,quality_12_df,on='user_id',how='left')
+    qual_12 = qual_12['counts']
+
+    # 12/전체cnt
+    qual_12_rate = qual_12 / quality_12_sum
+    qual_12_rate= qual_12_rate.fillna(0).values.reshape(-1,1)
+
+    quality_24= temp.reset_index()[temp.reset_index().fwver==24].user_id.value_counts()
+    quality_24_df = quality_24.to_frame()
+    quality_24_df = quality_24_df.reset_index()
+    quality_24_df = quality_24_df.rename(columns = {'index' :'user_id','user_id':'counts'})
+    quality_24_sum = quality_24_df.counts.sum()
+    qual_24 = pd.merge(qual_num,quality_24_df,on='user_id',how='left')
+    qual_24 = qual_24['counts']
+    qual_24_count_np = qual_24.values
+
+    # 12/전체cnt
+    qual_24_rate = qual_24 / quality_24_sum
+    qual_24_rate= qual_24_rate.fillna(0).values.reshape(-1,1)
+    
+    #24/12 비율
+    qual_24_12_rate = qual_24 / qual_12
+    qual_24_12_rate = qual_24_12_rate.fillna(0)
+    qual_24_12_rate_np = qual_24_12_rate.values.reshape(-1,1)
+
+
+    return np.concatenate((qual_val_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np),axis=1)
