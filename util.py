@@ -314,3 +314,12 @@ def qua_count(df,user_num, user_min,qt_id, noqt_id):
         i = i-user_min
         qua_count_list[i] = qua_count_mean
     return np.array(qua_count_list).reshape(user_num,1)
+
+def qual_change(df, user_num, user_min):
+    tmp = df.groupby('user_id')[['quality_' + str(i) for i in range(13)]].nunique() - 1
+    tmp2 = tmp.sum(axis=1)
+    qual_dic = defaultdict(lambda: 0, zip(tmp2.index, tmp2))
+    qaul_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_num+1)]})
+    qaul_num['n_qualchange'] = qaul_num['user_id'].map(qual_dic)
+
+    return qaul_num['n_qualchange'].values

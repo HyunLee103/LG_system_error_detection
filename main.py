@@ -15,7 +15,7 @@ from sklearn.model_selection import KFold
 import warnings
 warnings.filterwarnings(action='ignore')
 
-from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count
+from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count,qual_change
 
 from scipy.stats import skew
 from scipy.stats import norm, kurtosis
@@ -88,8 +88,9 @@ def main(sub_name,train=True,split=False,model='lgb'):
     # err_time_seg_train = mk_time_seg_feature(train_err, 15000, 10000)
     err_train_count = err_count(train_err,15000,'train')
     # qua_train_count = qua_count(train_quality,15000, 10000,train_qt_id, train_noqt_id)
-    
-    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count), axis=1)
+    train_qual_change = qual_change(train_quality, 15000, 10000)
+
+    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count,train_qual_change), axis=1)
 
 
     err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
@@ -99,9 +100,10 @@ def main(sub_name,train=True,split=False,model='lgb'):
     # quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
     err_test_count = err_count(test_err,test_user_number,'test')
     # qua_test_count = qua_count(train_quality,test_user_number,test_user_id_min,test_qt_id, test_noqt_id)
+    test_qual_change = qual_change(test_quality, test_user_number,test_user_id_min)
 
     
-    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count), axis=1)
+    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count,test_qual_change), axis=1)
 
 
     problem = np.zeros(15000)
