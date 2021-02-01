@@ -104,9 +104,6 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
 
 def mk_qt_feature(df,vars,user_num,user_min):
 
-    for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
-        df[qual_num] = df[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
-
     q1 = np.zeros((user_num,6))
     q2 = np.zeros((user_num,6))
     q3 = np.zeros((user_num,1))
@@ -319,7 +316,24 @@ def qual_change(df, user_num, user_min):
     tmp = df.groupby('user_id')[['quality_' + str(i) for i in range(13)]].nunique() - 1
     tmp2 = tmp.sum(axis=1)
     qual_dic = defaultdict(lambda: 0, zip(tmp2.index, tmp2))
-    qaul_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_num+1)]})
+    qaul_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_num)]})
     qaul_num['n_qualchange'] = qaul_num['user_id'].map(qual_dic)
 
     return qaul_num['n_qualchange'].values
+
+def qual_statics(df, user_count, user_min):
+    for x in range(0,13):
+        if x == 3 or x==4:
+            pass
+        else:
+            qual_df = df.groupby('user_id')['quality_'+str(x)].agg(['mean', 'std', 'min', 'max'])
+            qual_df = qual_df.reset_index()
+            qaul_num = pd.DataFrame(data={'user_id': [num for num in range(10000, 25000)]})
+            ql_mg = pd.merge(qaul_num,qual_df,on='user_id',how='left')
+            ql_mg.drop('user_id',axis=1,inplace=True)
+            ql_val = ql_mg.fillna(0).values
+            if x == 0:
+                qual_val_all = ql_val
+            else:
+                qual_val_all = np.concatenate((qual_val_all,ql_val),axis=1)
+    return qual_val_all
