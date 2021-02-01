@@ -227,6 +227,10 @@ def mk_time_feature(df, user_num, user_min,err_mode=True):
         err_time_stat = err_date.groupby('user_id').agg({'counts': [np.min, np.max, np.mean, np.std, skew,np.size]}).reset_index()
         err_time_stat.columns = ['user_id', 'time_min', 'time_max', 'time_mean', 'time_std', 'time_skew','time_count']
         err_time_stat.time_std = err_time_stat.time_std.fillna(0)
+        if user_min>10000:
+            err_time_stat.loc[-1] = [43262, 0, 0, 0,0,0,0]  # adding a row
+            err_time_stat.index = err_time_stat.index + 1  # shifting index
+            err_time_stat = err_time_stat.sort_values(by='user_id')  # sorting by index
         err_time_stat.drop('user_id', axis=1, inplace=True)
         err_time_val = err_time_stat.values
 
