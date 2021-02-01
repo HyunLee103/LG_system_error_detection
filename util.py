@@ -219,6 +219,7 @@ def mk_time_feature(df, user_num, user_min,err_mode=True):
         df_day[var + '_pct'] = df_day[var] / df_day['all']
 
     del df_day['all']
+    df_day = df_day.fillna(0)
 
     df_day_val = df_day.values
     if err_mode :
@@ -404,10 +405,18 @@ def qual_statics(df, user_count, user_min):
     return np.concatenate((qual_val_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np),axis=1)
 
 
-def nun_err(df):
+def nun_err(df,ver):
     df_cp = df.copy()
     df_cp['errtype_errcode']= df_cp['errtype'].astype('str') + '_' + df_cp['errcode'].astype('str')
     nun_err = df_cp.groupby('user_id')['errtype','errcode','errtype_errcode'].nunique().reset_index()
-    nun_err.drop('user_id',axis=1,inplace=True)
-    nun_err_val = nun_err.values
+    if ver =='train':
+        nun_err.drop('user_id', axis=1, inplace=True)
+        nun_err_val = nun_err.values
+    else:
+        nun_err.loc[-1] = [43262, 0, 0, 0]  # adding a row
+        nun_err.index = nun_err.index + 1  # shifting index
+        nun_err = nun_err.sort_values(by='user_id')  # sorting by index
+        nun_err.drop('user_id', axis=1, inplace=True)
+        nun_err_val = nun_err.values
+
     return nun_err_val
