@@ -402,3 +402,12 @@ def qual_statics(df, user_count, user_min):
 
 
     return np.concatenate((qual_val_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np),axis=1)
+
+
+def nun_err(df):
+    df_cp = df.copy()
+    df_cp['errtype_errcode']= df_cp['errtype'].astype('str') + '_' + df_cp['errcode'].astype('str')
+    nun_err = df_cp.groupby('user_id')['errtype','errcode','errtype_errcode'].nunique().reset_index()
+    nun_err.drop('user_id',axis=1,inplace=True)
+    nun_err_val = nun_err.values
+    return nun_err_val
