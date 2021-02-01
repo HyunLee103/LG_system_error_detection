@@ -328,7 +328,7 @@ def qual_statics(df, user_count, user_min):
         else:
             qual_df = df.groupby('user_id')['quality_'+str(x)].agg(['mean', 'std', 'min', 'max'])
             qual_df = qual_df.reset_index()
-            qaul_num = pd.DataFrame(data={'user_id': [num for num in range(10000, 25000)]})
+            qaul_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_count)]})
             ql_mg = pd.merge(qaul_num,qual_df,on='user_id',how='left')
             ql_mg.drop('user_id',axis=1,inplace=True)
             ql_val = ql_mg.fillna(0).values
