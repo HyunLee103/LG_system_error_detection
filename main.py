@@ -15,7 +15,7 @@ from sklearn.model_selection import KFold
 import warnings
 warnings.filterwarnings(action='ignore')
 
-from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count,qual_change,qual_statics,mk_time_feature
+from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count,qual_change,qual_statics,mk_time_feature,nun_err
 
 
 test_user_id_max = 44998
@@ -91,8 +91,9 @@ def main(sub_name,train=True,split=False,model='lgb'):
     train_qual_stats = qual_statics(train_quality, 15000, 10000)
     train_err_time = mk_time_feature(train_err,15000, 10000, err_mode=True)
     train_qual_time = mk_time_feature(train_quality,15000,10000, err_mode=False)
+    train_nun = nun_err(train_err)
 
-    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count,train_qual_change,train_qual_stats,train_err_time,train_qual_time ), axis=1)
+    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count,train_qual_change,train_qual_stats,train_err_time,train_qual_time,train_nun), axis=1)
 
 
     err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
@@ -106,8 +107,9 @@ def main(sub_name,train=True,split=False,model='lgb'):
     test_qual_stats = qual_statics(test_quality, test_user_number,test_user_id_min)
     test_err_time = mk_time_feature(test_err,test_user_number, test_user_id_min, err_mode=True)
     test_qual_time = mk_time_feature(test_quality,test_user_number, test_user_id_min, err_mode=False)
-    
-    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count,test_qual_change,test_qual_stats,test_err_time,test_qual_time), axis=1)
+    test_nun = nun_err(test_err)
+
+    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count,test_qual_change,test_qual_stats,test_err_time,test_qual_time,test_nun), axis=1)
 
 
     problem = np.zeros(15000)
