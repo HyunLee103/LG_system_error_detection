@@ -17,8 +17,6 @@ warnings.filterwarnings(action='ignore')
 
 from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count,qual_change,qual_statics,mk_time_feature
 
-from scipy.stats import skew
-from scipy.stats import norm, kurtosis
 
 test_user_id_max = 44998
 test_user_id_min = 30000
@@ -91,8 +89,8 @@ def main(sub_name,train=True,split=False,model='lgb'):
     err_train_count = err_count(train_err,15000,'train')
     train_qual_change = qual_change(train_quality, 15000, 10000)
     train_qual_stats = qual_statics(train_quality, 15000, 10000)
-    train_err_time = mk_time_feature(train_err,15000, 10000)
-    train_qual_time = mk_time_feature(train_quality,15000, 10000)
+    train_err_time = mk_time_feature(train_err,15000, 10000, err_mode=True)
+    train_qual_time = mk_time_feature(train_quality,15000,10000, err_mode=False)
 
     train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count,train_qual_change,train_qual_stats,train_err_time,train_qual_time ), axis=1)
 
@@ -106,9 +104,8 @@ def main(sub_name,train=True,split=False,model='lgb'):
     # qua_test_count = qua_count(train_quality,test_user_number,test_user_id_min,test_qt_id, test_noqt_id)
     test_qual_change = qual_change(test_quality, test_user_number,test_user_id_min)
     test_qual_stats = qual_statics(test_quality, test_user_number,test_user_id_min)
-    test_err_time = mk_time_feature(test_err,test_user_number, test_user_id_min)
-    test_qual_time = mk_time_feature(test_quality,test_user_number, test_user_id_min)
-
+    test_err_time = mk_time_feature(test_err,test_user_number, test_user_id_min, err_mode=True)
+    test_qual_time = mk_time_feature(test_quality,test_user_number, test_user_id_min, err_mode=False)
     
     test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count,test_qual_change,test_qual_stats,test_err_time,test_qual_time), axis=1)
 
