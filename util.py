@@ -346,6 +346,34 @@ def qual_statics(df, user_count, user_min):
 
     qual_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_count)]})
 
+
+        
+    for x in range(0,13):
+        if x == 3 or x==4:
+            pass
+        else:
+            qual_i_mean = df['quality_'+str(x)].agg(['mean']) #값 하나
+
+            user_qual_i_mean = df.groupby('user_id')['quality_'+str(x)].agg(['mean'])
+            user_qual_i_mean = user_qual_i_mean.reset_index()
+            user_qual_i_std = df.groupby('user_id')['quality_'+str(x)].agg(['std'])
+            user_qual_i_std = user_qual_i_std.reset_index()
+            qual_num = pd.DataFrame(data={'user_id': [num for num in range(user_min, user_min+user_count)]})
+            user_qual_i_mean_df = pd.merge(qual_num,user_qual_i_mean,on='user_id',how='left')
+            user_qual_i_std_df = pd.merge(qual_num,user_qual_i_std,on='user_id',how='left')
+
+            qual_ff = user_qual_i_std_df['std'] /(user_qual_i_mean_df['mean'] - qual_i_mean['mean'])
+            qual_ff = qual_ff.fillna(0)
+            qual_ff = qual_ff.values
+            qual_ff = qual_ff.reshape((-1,1))
+
+            if x == 0:
+                qual_ff_all = qual_ff
+            else:
+                qual_ff_all = np.concatenate((qual_ff_all,qual_ff),axis=1)
+        
+        
+
     col = 'quality_1'
     q1_minus1_cnt = df[df[col] == -1 ].groupby('user_id').count()[col] 
     q1_minus1_cnt = q1_minus1_cnt.reset_index("user_id")
@@ -406,6 +434,7 @@ def qual_statics(df, user_count, user_min):
     qual_24_12_rate_np = qual_24_12_rate.values.reshape(-1,1)
 
 
+<<<<<<< Updated upstream
     return np.concatenate((qual_val_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np),axis=1)
 
 
@@ -424,3 +453,6 @@ def nun_err(df,ver):
         nun_err_val = nun_err.values
 
     return nun_err_val
+=======
+    return np.concatenate((qual_val_all,qual_ff_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np),axis=1)
+>>>>>>> Stashed changes
