@@ -65,7 +65,7 @@ def dataset_trans2(df, types, Num_df_user, Num_errtype, First_index, fwver_total
 
     m2=day_data.mean(axis=2)
     std2=day_data.std(axis=2)       
-
+    m2_max = day_data.max(axis=2)
     #m2_1=day_data.max(axis=2)
     
     df2['day'] =df2.time_second.dt.day
@@ -86,42 +86,12 @@ def dataset_trans2(df, types, Num_df_user, Num_errtype, First_index, fwver_total
 
     m3=day_data.mean(axis=2)
     std3=day_data.std(axis=2)       
-
+    m3_max = day_data.max(axis=2)
     #m3_1=day_data.max(axis=2)
     
-    return [m2, std2, m3, std3]
+    return [m2, std2,m2_max, m3, std3,m3_max]
 
-def err_count_minus(df, user_num, min_num):
-    df2 = df.copy()
-    df2['time_day'] = df2['time'].apply(make_datetime_day)
-    df2['day'] =df2.time_day.dt.day
 
-    df_ = df2.loc[(df2.time_day >=pd.to_datetime('2020-11-01 00:00:00')) & (df2.time_day <=pd.to_datetime('2020-11-30 23:59:59'))]
-    datas = df_.groupby(['user_id','day']).count().reset_index()
-
-    day_count = np.zeros((user_num,30))
-    for i in range(datas.shape[0]):
-        idx = datas['user_id'][i]
-        day = datas['day'][i]
-        count = datas['time'][i]
-    #print(idx, day, count)
-        day_count[idx-min_num][day-1] = count.astype('float')
-    
-    max_list = []
-    min_list = []
-    for idx in tqdm(range(user_num)):
-        max_value=0
-        min_value = 1000
-        for day in range(1,30):
-            after_day_minus = abs(day_count[idx][day-1] - day_count[idx][day])
-            if  after_day_minus > max_value:
-                max_value = after_day_minus
-            if after_day_minus < min_value:
-                min_value = after_day_minus
-            
-        max_list.append(max_value)
-        min_list.append(min_value)
-    return np.concatenate((np.array(max_list).reshape(user_num,1), np.array(min_list).reshape(user_num,1)),axis=1)
 
 def f_pr_auc(probas_pred, y_true):
     labels=y_true.get_label()

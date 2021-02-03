@@ -45,7 +45,7 @@ train_user_number = 15000
 
 
 
-def main(sub_name,train=True,split=False,model='lgb'):
+def main(sub_name,train=True,model='lgb'):
     ## data load 
     PATH = "data/"
     train_err  = pd.read_csv(PATH+'train_err_data.csv')
@@ -110,7 +110,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
     err_train_count = err_count(train_err,15000,'train')
     train_qual_change = qual_change(train_quality, 15000, 10000)
     model_train = model_ft(train_err,15000)
-    nn_train = err_count_minus(train_err, 15000,10000)
+    # nn_train = err_count_minus(train_err, 15000,10000)
     datalist2 = dataset_trans2(train_err,'train',15000,42,10000, fwver_total)
     seo_train2 = np.concatenate(tuple(datalist2),axis=1)
 
@@ -123,7 +123,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
     fw_model_ratio = err_fwver_train.reshape(-1,1)/model_train
     train_qual_stats = qual_statics(train_quality, 15000, 10000)
 
-    train_x = np.concatenate((err_train, train_qual_stats,train_err_time,train_qual_time, err_train_count,seoho_train,train_qual_change.reshape(-1,1),model_train,qt_ch_err_ratio,fw_err_ratio,fw_model_ratio,nn_train,seo_train2,train_nun), axis=1)
+    train_x = np.concatenate((err_train, train_qual_stats,train_err_time,train_qual_time, err_train_count,seoho_train,train_qual_change.reshape(-1,1),model_train,qt_ch_err_ratio,fw_err_ratio,fw_model_ratio,seo_train2,train_nun), axis=1)
 
     
     err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
@@ -134,7 +134,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
     err_test_count = err_count(test_err,test_user_number,'test')
     test_qual_change = qual_change(test_quality, test_user_number,test_user_id_min)
     model_test = model_ft(test_err,14999)
-    nn_test = err_count_minus(test_err,14999,30000)
+    # nn_test = err_count_minus(test_err,14999,30000)
     test_qual_stats = qual_statics(test_quality, test_user_number,test_user_id_min)
     test_datalist2 = dataset_trans2(test_err,'test',14999,42,30000, fwver_total)
     seo_test2 = np.concatenate(tuple(test_datalist2),axis=1)
@@ -147,125 +147,59 @@ def main(sub_name,train=True,split=False,model='lgb'):
     fw_err_ratio_t = err_fwver_test.reshape(-1,1)/err_test_count
     fw_model_ratio_t = err_fwver_test.reshape(-1,1)/model_test.reshape(-1,1)
 
-    test_x = np.concatenate((err_test, test_qual_stats,test_err_time,test_qual_time, err_test_count,seoho_test,test_qual_change.reshape(-1,1),model_test.reshape(-1,1),qt_ch_err_ratio_t,fw_err_ratio_t,fw_model_ratio_t,nn_test,seo_test2,test_nun), axis=1)
+    test_x = np.concatenate((err_test, test_qual_stats,test_err_time,test_qual_time, err_test_count,seoho_test,test_qual_change.reshape(-1,1),model_test.reshape(-1,1),qt_ch_err_ratio_t,fw_err_ratio_t,fw_model_ratio_t,seo_test2,test_nun), axis=1)
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
     train_y = problem
 
+    train_x = pd.DataFrame(train_x)[pd.DataFrame(train_x).columns.difference([389,94,432,194,323])]
+    test_x = pd.DataFrame(test_x)[pd.DataFrame(test_x).columns.difference([389,94,432,194,323])]
+
     print(train_x.shape)
-    print(test_x.shape) 
+    print(test_x.shape)
 
-    pd.DataFrame(train_x).isnull().sum()
-
-    if split:
-        quality_train_user_id = train_quality['user_id'].unique()
-        quality_train_user_id = quality_train_user_id-train_user_id_min
-        quality_train_user_id
-        quality_train_user_id = quality_train_user_id.tolist()
-
-
-        nonquality_train_user_id = []
-        for i in range(train_user_number):
-            nonquality_train_user_id.append(i)
-        for i in quality_train_user_id:
-            nonquality_train_user_id.remove(i)
-            
-        quality_test_user_id = test_quality['user_id'].unique()
-        quality_test_user_id = quality_test_user_id-test_user_id_min
-        quality_test_user_id
-        quality_test_user_id = quality_test_user_id.tolist()
         
-        nonquality_test_user_id = []
-        for i in range(test_user_number):
-            nonquality_test_user_id.append(i)
-        for i in quality_test_user_id:
-            nonquality_test_user_id.remove(i)
-        
-        train_x2 = np.concatenate((err_train, q_train, err_fwver_train), axis=1)
-        test_x2 = np.concatenate((test_x, q_test, err_fwver_test), axis=1)
-        qua_train_x = train_x[quality_train_user_id]
-        nonqua_train_x = train_x2[nonquality_train_user_id]
-        print(qua_train_x.shape)
-        print(nonqua_train_x.shape)
-        
-        qua_test_x = test_x[quality_test_user_id]
-        nonqua_test_x = test_x2[nonquality_test_user_id]
-        
-        qua_train_y = train_y[quality_train_user_id]
-        nonqua_train_y = train_y[nonquality_train_user_id]
 
     ## modeling
     if train:
-        if model == 'automl':
-            if split:
-                # quality_id
-                train = pd.DataFrame(data=qua_train_x)
-                train['problem'] = qua_train_y
-                clf = setup(data = train, target = 'problem', session_id = 123) 
-                best_5 = compare_models(sort = 'AUC', n_select = 5)
-                blended = blend_models(estimator_list = best_5, fold = 5, method = 'soft')
-                pred_holdout = predict_model(blended)
-                final_model = finalize_model(blended)
-                
-                ## test
-                test = pd.DataFrame(data=test_x)
-                qua_predictions = predict_model(final_model, data = test)
-                
-                
-                # nonquality_id
-                train = pd.DataFrame(data=nonqua_train_x)
-                train['problem'] = nonqua_train_y
-                clf = setup(data = train, target = 'problem', session_id = 123) 
-                best_5_2 = compare_models(sort = 'AUC', n_select = 5)
-                blended_2 = blend_models(estimator_list = best_5_2, fold = 5, method = 'soft')
-                pred_holdout = predict_model(blended_2)
-                final_model = finalize_model(blended_2)
-                test_2 = pd.DataFrame(data=nonqua_test_x)
-                nonqua_predictions = predict_model(final_model, data = test_2)
-                
-                sample_submission  = pd.read_csv(PATH+"sample_submission.csv")
-                qua_x = []
-                for i in range(len(qua_predictions['Score'])):
-                    if qua_predictions['Label'][i] =='1.0':
-                        qua_x.append(qua_predictions['Score'][i])
-                    else:
-                        qua_x.append(1-qua_predictions['Score'][i])
-                nonqua_x = []
-                for i in range(len(nonqua_predictions['Score'])):
-                    if nonqua_predictions['Label'][i] =='1.0':
-                        nonqua_x.append(nonqua_predictions['Score'][i])
-                    else:
-                        nonqua_x.append(1-nonqua_predictions['Score'][i])
-                        
-                final_prediction = [0 for i in range(test_user_number)]
-                id = 0
-                for i in quality_test_user_id:
-                    final_prediction[i] = qua_x[id]
-                    id +=1
-                
-                id = 0
-                for i in nonquality_test_user_id:
-                    final_prediction[i] = nonqua_x[id]
-                    id +=1
-                    
-                sample_submission['problem'] = final_prediction
-                if not os.path.exists('submission'):
-                    os.makedirs(os.path.join('submission'))
-                sample_submission.to_csv(f"submission/{sub_name}.csv", index = False)
-                
-    
+        if model == 'automl':              
             train = pd.DataFrame(data=train_x)
             train['problem'] = problem
             clf = setup(data = train, target = 'problem', session_id = 123) 
-            best_5 = compare_models(sort = 'AUC', n_select = 5)
-            blended = blend_models(estimator_list = best_5, fold = 5, method = 'soft')
-            pred_holdout = predict_model(blended)
-            final_model = finalize_model(blended)
+            cat = create_model('catboost')
+            tune_cat = tune_model(cat, optimize='AUC')
+
+            gbc_model = create_model('gbc')
+
+            tune_gbc = tune_model(gbc_model, optimize = 'AUC')
+
+            lgm_model = create_model('lightgbm')
+
+            tune_lgm = tune_model(lgm_model, optimize = 'AUC')
+
+            et_model = create_model('et')
+
+            tune_et = tune_model(et_model, optimize = 'AUC')
+
+            rf_model = create_model('rf')
+
+            tune_rf = tune_model(rf_model, optimize = 'AUC')
+
+            blended5 = blend_models(estimator_list= [tune_cat, tune_gbc, tune_lgm, tune_et, tune_rf], method='soft')
+
+            pred_holdout = predict_model(blended5)
+
+            final_model2 = finalize_model(blended5)
+
+            # best_5 = compare_models(sort = 'AUC', n_select = 5)
+            # blended = blend_models(estimator_list = best_5, fold = 5, method = 'soft')
+            # pred_holdout = predict_model(blended)
+            # final_model = finalize_model(blended)
             
             ## test
             test = pd.DataFrame(data=test_x)
-            predictions = predict_model(final_model, data = test)
+            predictions = predict_model(final_model2, data = test)
             
             
             sample_submission  = pd.read_csv(PATH+"sample_submission.csv")
@@ -280,8 +214,10 @@ def main(sub_name,train=True,split=False,model='lgb'):
 
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
-            sample_submission.to_csv(f"submission/37.csv", index = False)
-            
+            sample_submission.to_csv(f"submission/final_2model_ensemble_2.csv", index = False)
+        
+        
+
 
         if model == 'lgb':
             models     = []
@@ -347,7 +283,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
 
             # submit
             sample_submission = pd.read_csv(PATH+'sample_submission.csv')
-            sample_submission['problem'] = tem
+            sample_submission['problem'] = pred_ensemble
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
             sample_submission.to_csv(f"submission/28_19_24Ensemble.csv", index = False)
@@ -356,42 +292,5 @@ def main(sub_name,train=True,split=False,model='lgb'):
 if __name__ == '__main__':
     main('test')
 
-# from eli5.sklearn import PermutationImportance
-# from lightgbm import LGBMClassifier
-# from sklearn.model_selection import train_test_split
 
-# parameters = {
-#     'application': 'binary',
-#     'objective': 'binary',
-#     'metric': 'auc',
-#     'is_unbalance': 'true',
-#     'boosting': 'gbdt',
-#     'num_leaves': 31,
-#     'feature_fraction': 0.5,
-#     'bagging_fraction': 0.5,
-#     'bagging_freq': 20,
-#     'learning_rate': 0.001,
-#     'verbose': 1
-# }  
-# lgbm = LGBMClassifier(n_estimators=700)
-
-# x, x_val, y, y_val = train_test_split(train_x,train_y,test_size=0.2,random_state=42)
-
-# lgbm.fit(x,y,early_stopping_rounds=100,eval_metric='auc',eval_set=[(x_val,y_val)],verbose=True)
-
-# perm = PermutationImportance(lgbm, scoring = "roc_auc", random_state = 42).fit(x_val, y_val) 
-
-# r = permutation_importance(lgbm, x_val, y_val,n_repeats=15,random_state=26)
-
-# eli5.show_weights(perm, top = 364, feature_names = [str(x) for x in range(0,364)])
-# eli5.explain_weights(perm, top=400)
-
-# tem = pd.DataFrame(x_val)
-# [x for x in range(0,364)]
-# pd.DataFrame(x).columns()
-
-# pd.DataFrame(x_val).isnull().sum()
-
-# import sklearn
-# sklearn.metrics.SCORERS.keys()
 
