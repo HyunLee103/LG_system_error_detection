@@ -4,6 +4,8 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import pickle
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 from tqdm import tqdm
 import gc
@@ -16,9 +18,110 @@ import warnings
 from collections import Counter, defaultdict
 warnings.filterwarnings(action='ignore')
 
+from gensim.models import KeyedVectors
+
 from scipy.stats import skew
 from scipy.stats import norm, kurtosis
 
+def make_datetime_day(x):
+    # string 타입의 Time column을 datetime 타입으로 변경
+    x = str(x)
+    # print(x)
+    year = int(x[:4])
+    month = int(x[4:6])
+    day = int(x[6:8])
+    hour = int(x[8:10])
+    #min  = int(x[10:12])
+    #sec  = int(x[12:])
+    return dt.datetime(year, month, day, hour)
+
+def dataset_trans2(df, types, Num_df_user, Num_errtype, First_index, fwver_total):
+    num_df_user = Num_df_user
+    num_errtype =Num_errtype
+    first_index = First_index
+    
+    df2 = df.copy()
+    
+    df2['time_second'] = df2['time'].apply(make_datetime_second)
+    
+    
+    
+    df2['hour'] =df2.time_second.dt.hour
+
+
+    df2 = df2.loc[(df2.time_second >=pd.to_datetime('2020-11-01 00:00:00')) & (df2.time_second <=pd.to_datetime('2020-11-30 23:59:59'))]
+    #datas = df[['user_id','errtype','hour']]
+    #df_=datas[['user_id','hour','errtype']].count().to_frame().reset_index()
+    df_=df2.groupby(['user_id','hour','errtype']).count().reset_index()
+    #df_ =df_.sort_values(['user_id','hour']).rename(columns = {0:'counts'}).reset_index(drop=True)
+
+
+    day_data = np.zeros((num_df_user,42,24))
+    for i in range(24):
+        # time 변수가 결국 count 수.
+        dfa = df_.loc[df_['hour']==i][['user_id','errtype','time']].values
+        for inx , val1 ,val2 in tqdm(dfa):
+            day_data[:,:,i][inx-first_index,val1-1] = val2
+
+    m2=day_data.mean(axis=2)
+    std2=day_data.std(axis=2)       
+
+    #m2_1=day_data.max(axis=2)
+    
+    df2['day'] =df2.time_second.dt.day
+
+
+    df2 = df2.loc[(df2.time_second >=pd.to_datetime('2020-11-01 00:00:00')) & (df2.time_second <=pd.to_datetime('2020-11-30 23:59:59'))]
+    #datas = df[['user_id','errtype','day']]
+    #df_=datas[['user_id','day','errtype']].count().to_frame().reset_index()
+    df_=df2.groupby(['user_id','day','errtype']).count().reset_index()
+    #df_ =df_.sort_values(['user_id','day']).rename(columns = {0:'counts'}).reset_index(drop=True)
+
+
+    day_data = np.zeros((num_df_user,42,30))
+    for i in range(30):
+        dfa = df_.loc[df_['day']==(i+1)][['user_id','errtype','time']].values
+        for inx , val1 ,val2 in tqdm(dfa):
+            day_data[:,:,i][inx-first_index,val1-1] = val2
+
+    m3=day_data.mean(axis=2)
+    std3=day_data.std(axis=2)       
+
+    #m3_1=day_data.max(axis=2)
+    
+    return [m2, std2, m3, std3]
+
+def err_count_minus(df, user_num, min_num):
+    df2 = df.copy()
+    df2['time_day'] = df2['time'].apply(make_datetime_day)
+    df2['day'] =df2.time_day.dt.day
+
+    df_ = df2.loc[(df2.time_day >=pd.to_datetime('2020-11-01 00:00:00')) & (df2.time_day <=pd.to_datetime('2020-11-30 23:59:59'))]
+    datas = df_.groupby(['user_id','day']).count().reset_index()
+
+    day_count = np.zeros((user_num,30))
+    for i in range(datas.shape[0]):
+        idx = datas['user_id'][i]
+        day = datas['day'][i]
+        count = datas['time'][i]
+    #print(idx, day, count)
+        day_count[idx-min_num][day-1] = count.astype('float')
+    
+    max_list = []
+    min_list = []
+    for idx in tqdm(range(user_num)):
+        max_value=0
+        min_value = 1000
+        for day in range(1,30):
+            after_day_minus = abs(day_count[idx][day-1] - day_count[idx][day])
+            if  after_day_minus > max_value:
+                max_value = after_day_minus
+            if after_day_minus < min_value:
+                min_value = after_day_minus
+            
+        max_list.append(max_value)
+        min_list.append(min_value)
+    return np.concatenate((np.array(max_list).reshape(user_num,1), np.array(min_list).reshape(user_num,1)),axis=1)
 
 def f_pr_auc(probas_pred, y_true):
     labels=y_true.get_label()
@@ -28,17 +131,18 @@ def f_pr_auc(probas_pred, y_true):
 
 
 def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain):
-
+    model = KeyedVectors.load_word2vec_format('errtype_w2v')
     df['typecode'] = df.errtype.astype(str) + df.errcode.astype(str)
-    id_err_var = df[['user_id','typecode','errtype','fwver','errcode']].values
+    id_err_var = df[['user_id','typecode','errtype','fwver','errcode','model_nm']].values
 
     # 빈 array 생성
     typecode_arr = np.zeros((user_num,3))
     type_arr = np.zeros((user_num,47))
-    fwver_arr = np.zeros((user_num,13))
+    fwver_arr = np.zeros((user_num,14))
     code_arr = np.zeros((user_num, 17))
+    type_w2v_arr = np.zeros((user_num, 32))
 
-    for idx, typecode,type, fwver, code in tqdm(id_err_var):
+    for idx, typecode,type, fwver, code, model in tqdm(id_err_var):
 
         # type + code
         if typecode in ['101','23connection fail to establish']:
@@ -46,7 +150,7 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
         elif typecode in ['40','332','261','141','151','161','111','121']:
             typecode_arr[idx - user_min,1] += 1
 
-        typecode_arr[idx - user_min,2] = (typecode_arr[idx - user_min,0]+1)/(typecode_arr[idx - user_min,1]+1)
+        typecode_arr[idx - user_min,2] = (typecode_arr[idx - user_min,0])/(typecode_arr[idx - user_min,1]+1)
         
         # errtype
         type_arr[idx - user_min,type - 1] += 1
@@ -59,7 +163,13 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
             type_arr[idx - user_min,44] += 1
         elif type in [1,8]:
             type_arr[idx - user_min,45] += 1
-        type_arr[idx - user_min,46] = (type_arr[idx - user_min,42]+1)/(type_arr[idx - user_min,45]+1)   
+        type_arr[idx - user_min,46] = (type_arr[idx - user_min,42])/(type_arr[idx - user_min,45]+1)  
+
+        # lst = []
+        # for type in id_err_var[id_err_var.user_id==idx].errtype:
+        #     lst.append(model.wv.get_vector(str(type)))
+
+        # type_w2v_arr[idx-user_min] = np.array(lst).mean(axis=0)
 
         # fwver
         fwver_dict = {'05.15.2138':0,'04.22.1750':1,'04.33.1261':2,'04.16.3553':3,'03.11.1167':4,'04.22.1778':5,'04.22.1684':6,'04.33.1185':7,'04.16.3571':8}
@@ -74,6 +184,7 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
             fwver_arr[idx-user_min,11] += 1
         elif fwver in ['04.73.2237','04.22.1684','05.15.2138']:
             fwver_arr[idx-user_min,12] += 1
+        fwver_arr[idx - user_min,13] = (fwver_arr[idx-user_min,10])/(fwver_arr[idx-user_min,12]+1)
 
         # errcode
         errcode_top14 = ['1', '0', 'connection timeout', 'B-A8002', '80', '79', '14', 'active','2', '84', '85', 'standby', 'NFANDROID2','connection fail to establish']
@@ -85,7 +196,8 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
         #     code_arr[idx-user_min,15] += 1
         elif code in list(no_complainer_48h_errcode_unique_testtrain)+['Q-64002','S-65002','0']:
             code_arr[idx-user_min,15] += 1
-        code_arr[idx-user_min,16] = (code_arr[idx-user_min,14]+1)/(code_arr[idx-user_min,15]+1)
+        code_arr[idx-user_min,16] = (code_arr[idx-user_min,14])/(code_arr[idx-user_min,15]+1)
+
 
     # 변수 평균 분산 추가
     type_mean = type_arr[:,42:].mean(axis=1)
@@ -106,6 +218,9 @@ def mk_err_feature(df,user_num,user_min,complainer_48h_errcode_unique_testtrain,
 
 
 def mk_qt_feature(df,vars,user_num,user_min):
+
+    for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
+        df[qual_num] = df[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
 
     q1 = np.zeros((user_num,6))
     q2 = np.zeros((user_num,6))
@@ -144,6 +259,7 @@ def mk_qt_feature(df,vars,user_num,user_min):
     return np.concatenate((q1/11,q3,qt_mean.reshape(-1,1),qt_var.reshape(-1,1)),axis=1)
 
 
+
 def make_datetime(x):
     # string 타입의 Time column을 datetime 타입으로 변경
     x = str(x)
@@ -155,6 +271,7 @@ def make_datetime(x):
     # min  = int(x[10:12])
     # sec  = int(x[12:])
     return dt.datetime(year, month, day, hour)
+
 
 
 def mk_time_feature(df, user_num, user_min,err_mode=True):
@@ -227,16 +344,14 @@ def mk_time_feature(df, user_num, user_min,err_mode=True):
         err_time_stat = err_date.groupby('user_id').agg({'counts': [np.min, np.max, np.mean, np.std, skew,np.size]}).reset_index()
         err_time_stat.columns = ['user_id', 'time_min', 'time_max', 'time_mean', 'time_std', 'time_skew','time_count']
         err_time_stat.time_std = err_time_stat.time_std.fillna(0)
-        if user_min>10000:
-            err_time_stat.loc[-1] = [43262, 0, 0, 0,0,0,0]  # adding a row
-            err_time_stat.index = err_time_stat.index + 1  # shifting index
-            err_time_stat = err_time_stat.sort_values(by='user_id')  # sorting by index
         err_time_stat.drop('user_id', axis=1, inplace=True)
         err_time_val = err_time_stat.values
 
         return np.concatenate((hour_err, df_day_val,err_time_val), axis=1)
     else:
         return np.concatenate((hour_err, df_day_val), axis=1)
+
+
 
 ## fwver_count
 def mk_fwver_feature(df,user_num,user_min):
@@ -251,6 +366,7 @@ def mk_fwver_feature(df,user_num,user_min):
         id +=1
         
     return fwver_count
+
 
 
 
@@ -315,6 +431,284 @@ def qua_count(df,user_num, user_min,qt_id, noqt_id):
         qua_count_list[i] = qua_count_mean
     return np.array(qua_count_list).reshape(user_num,1)
 
+
+def tfidf(train=True):
+    if train:
+        with open("train_errtype_Text.pickle","rb") as fr:
+            lst = pickle.load(fr)
+    else:
+        with open("test_errtype_Text.pickle","rb") as fr:
+            lst = pickle.load(fr)
+
+    tfidf_vectorizer = TfidfVectorizer()
+    X = tfidf_vectorizer.fit_transform(lst)
+
+    return X.toarray()
+
+
+def make_datetime_second(x):
+    # string 타입의 Time column을 datetime 타입으로 변경
+    x = str(x)
+    # print(x)
+    year = int(x[:4])
+    month = int(x[4:6])
+    day = int(x[6:8])
+    hour = int(x[8:10])
+    min  = int(x[10:12])
+    sec  = int(x[12:])
+    return dt.datetime(year, month, day, hour, min, sec)
+
+
+
+def dataset_trans(df, types, Num_df_user, Num_errtype, First_index, fwver_total):
+    num_df_user = Num_df_user
+    num_errtype =Num_errtype
+    first_index = First_index
+        
+    
+    fwver_total_dic ={}
+    for v in range(len(fwver_total)):
+        fwver_total_dic[sorted(list(fwver_total))[v]] = v+1
+
+    def fwver_tran(x):
+        return fwver_total_dic[x]
+
+
+    df['ver_num'] = df['fwver'].apply(fwver_tran)
+    #
+    fwver_np = np.zeros((num_df_user,5))
+
+    v3=df[['user_id','ver_num']]
+    getdf =~(v3 == v3.shift(1))
+    logical =(getdf.user_id.apply(int) + getdf.ver_num.apply(int)) > 0
+    fwver_num=v3[logical]
+
+    fwver_num = fwver_num.reset_index(drop=True)
+    count =np.zeros(len(fwver_num),dtype=int)
+
+    for v in range(1,len(fwver_num)):
+        if fwver_num.user_id.values[v-1] ==fwver_num.user_id.values[v]:
+            count[v] = count[v-1] +1
+
+
+    fwver_num['count'] =count
+    fw_v = fwver_num.loc[fwver_num['count'].isin([0,1,2,3,4])].pivot(index='user_id',columns='count').reset_index().fillna(0).values
+    fw_v =fw_v.astype('int64')
+
+    
+    for inx, v1,v2,v3,v4,v5 in tqdm(fw_v):
+        fwver_np[inx-first_index,0] =v1
+        fwver_np[inx-first_index,1] =v2
+        fwver_np[inx-first_index,2] =v3
+        fwver_np[inx-first_index,3] =v4
+        fwver_np[inx-first_index,4] =v5
+    #print(fwver_np.shape)
+    #print(model_n.shape)
+    
+    target_df = df
+    first_num = first_index
+    count_num =num_df_user
+
+    dp = target_df[['user_id','model_nm','fwver']]
+    unique_data =target_df[(dp !=dp.shift(1)).sum(axis=1)>0]
+
+    dp2 = target_df[['user_id','model_nm']]
+    unique_data2 =target_df[(dp2 !=dp2.shift(1)).sum(axis=1)>0]
+
+    fwver_total_dic ={}
+    for v in range(len(fwver_total)):
+        fwver_total_dic[sorted(list(fwver_total))[v]] = v+1
+        
+    def fwver_tran(x):
+        return fwver_total_dic[x]
+
+    fwver = np.zeros((count_num,24))
+    for idx in tqdm(unique_data.user_id.unique()):
+        df_md =unique_data2.loc[unique_data2.user_id==idx].model_nm.values
+        df_fw = unique_data.loc[unique_data.user_id==idx].fwver.values
+
+        for md in range(len(df_md)):
+            fwver[idx-first_num,md] = int(df_md[md][-1])+1
+
+        for l in range(3,len(df_fw)+3):
+            fwver[idx-first_num,l] =fwver_total_dic[df_fw[l-3]]
+
+    fw_df = pd.DataFrame(fwver).reset_index().rename(columns={'index':'user_id'})
+
+    fwver_total_dic_rev = {v: k for k, v in fwver_total_dic.items()}
+    fwver_total_dic_rev2 = fwver_total_dic_rev.copy()
+    fwver_total_dic_rev[0] =0
+    fwver_total_dic_rev2[0] = '04.22.1750'  #max 값
+
+
+    def fwver_tras_reverse(x):
+        return fwver_total_dic_rev[x]
+
+    def fwver_tras_reverse2(x):
+        return fwver_total_dic_rev2[x]
+
+    fw_df[3] =fw_df[3].apply(fwver_tras_reverse2)
+    fw_df[4] =fw_df[4].apply(fwver_tras_reverse)
+    fw_df[5] =fw_df[5].apply(fwver_tras_reverse)
+    fw_df[6] =fw_df[6].apply(fwver_tras_reverse)
+    fw_df[7] =fw_df[7].apply(fwver_tras_reverse)
+
+
+    fw_df = fw_df.rename(columns={0:'md1',1:'md2',2:'md3',3:'fw1',4:'fw2',5:'fw3',6:'fw4',7:'fw5'})
+    fw_df['user_id'] =fw_df['user_id']+10000
+
+    pre_df=fw_df.iloc[:,:9]
+
+    md_flow = {str(x.astype("int")):(i+1) for i,x in enumerate(pre_df[['md1','md2','md3']].drop_duplicates().reset_index(drop=True).values)}
+    fw_flow = {str(x):(i+1) for i,x in enumerate(pre_df[['fw1','fw2','fw3','fw4','fw5']].drop_duplicates().reset_index(drop=True).values)}
+
+    
+    def fw_change_counter(x):
+        fwlst = []
+        for v in ['fw1','fw2','fw3','fw4','fw5']:
+            if x[v] ==0:
+                pass
+            else:
+                fwlst +=[x[v]]
+
+        if len(fwlst) ==len(list(set(fwlst))):
+            return 0
+        else:
+            return 1
+
+
+    def md_flow_change(x):
+        return md_flow[str(x[['md1','md2','md3']].values.astype("int"))]
+
+    def fw_flow_change(x):
+        return fw_flow[str(x[['fw1','fw2','fw3','fw4','fw5']].values)]
+    
+    def mean_str_fw_dum(x):
+        fwlst = []
+        for v in ['fw1','fw2','fw3','fw4','fw5']:
+            if x[v] ==0:
+                pass
+            else:
+                fwlst +=[int(x[v].replace('.',""))]
+        return np.array(fwlst).mean()
+
+
+
+    def std_str_fw_dum(x):
+        fwlst = []
+        for v in ['fw1','fw2','fw3','fw4','fw5']:
+            if x[v] ==0:
+                pass
+            else:
+                fwlst +=[int(x[v].replace('.',""))]
+        return np.array(fwlst).std()
+
+    pre_df=fw_df.iloc[:,:9]
+    #pre_df['md_counts'] = pre_df[['md1','md2','md3']].astype('bool').sum(axis=1)
+    #pre_df['fw_counts'] = pre_df[['fw1','fw2','fw3','fw4','fw5']].astype('bool').sum(axis=1)
+
+    pre_df['fw_change'] = pre_df.apply(fw_change_counter,axis=1)
+    pre_df['fw_flows'] = pre_df.apply(fw_flow_change,axis=1)
+    pre_df['md_flows'] = pre_df.apply(md_flow_change,axis=1)
+    
+    ## mean, std 추가해볼만하다.
+    pre_df['fw_mean'] = pre_df.apply(mean_str_fw_dum,axis=1)
+    pre_df['fw_std'] = pre_df.apply(std_str_fw_dum,axis=1)
+    fw_model_flow =pre_df.iloc[:,9:].values
+    
+    
+    first_num = first_index
+    count_num =num_df_user
+    
+    time_term = np.zeros((count_num,4))
+    
+    df['time_second'] = df['time'].apply(make_datetime_second)
+    tre_t =df[['user_id','time_second']].drop_duplicates()
+
+    for v in tqdm(tre_t.user_id.unique()):
+        test =tre_t.loc[tre_t.user_id ==v].time_second
+        if len(test) <=2:
+            time_term[v-first_num,0] = 0
+            time_term[v-first_num,1] = 0
+            time_term[v-first_num,2] = test.values[-1]-test.values[0]
+            time_term[v-first_num,3] = len(test)
+        else:
+            time_term[v-first_num,0] = (test -test.shift(1)).max().total_seconds()
+            time_term[v-first_num,1] = (test -test.shift(1)).min().total_seconds()
+            time_term[v-first_num,2] = test.values[-1]-test.values[0]  
+            time_term[v-first_num,3] = len(test)
+
+    dft = pd.DataFrame(time_term).copy()
+
+    dft[0] =dft[0]/3600
+    dft[2] =dft[2]/3600/24/10e8
+    dft[2] =np.where(dft[2].values==0,1,dft[2].values)
+    dft[4] =dft[0]/dft[3]
+    dft[4] = dft[0]/dft[3]*3600
+    dft[5] = dft[0]/24/dft[2]
+    time_term = dft.fillna(0).values
+    
+    
+    tsed = df.dropna(axis=0).reset_index(drop=True)[['user_id','time','fwver']]
+    dfw = tsed[['user_id','fwver']]
+    fw_d =dfw.loc[(dfw !=dfw.shift(1)).sum(axis=1)>0]
+
+    main_fw_ar = np.zeros((num_df_user,6))
+    for i,tgid in enumerate(tqdm(range(first_index,first_index+num_df_user))):
+
+        tgdf =fw_d.loc[fw_d.user_id ==tgid].iloc[1:,:]
+        tgidtotal = tsed.loc[tsed.user_id ==tgid]
+        try:
+            data =tgidtotal.loc[sorted([tgidtotal.index[0]] + [x-1 for x in tgdf.index]+[x for x in tgdf.index] + [tgidtotal.index[-1]] )]
+            t1 =data.time_second
+            if len(t1) %2 !=0:
+                print('lenth error')
+            time_delta = (t1-t1.shift(1)).dt.total_seconds()
+
+            main_fwver =data.loc[time_delta.loc[time_delta==time_delta.max()].index].fwver.values[0]
+            main_fw_ar[i,0] = fwver_total_dic[main_fwver]
+            main_fw_ar[i,1] =(time_delta[1::2].values).max().astype('float')/(time_delta.values[1:]).sum().astype('float')  #target fw workingtime / total
+            if len(time_delta) ==1:
+                main_fw_ar[i,2] =0  #min of change fwver time==0
+                main_fw_ar[i,3] =0  #std of change fwver time ==0
+                main_fw_ar[i,4] =0  #std
+                main_fw_ar[i,5] =0  #variance
+            else:
+                main_fw_ar[i,2] =time_delta[::2].min()/3600 # min hours
+                main_fw_ar[i,3] =time_delta[::2].std()/3600
+                main_fw_ar[i,4] =time_delta[1::2].values.astype('float').std()/3600  #std running time of fw
+                main_fw_ar[i,5] =(time_delta[1::2].values.astype('float')/3600).var()  #std running time of fw
+        except:
+            main_fw_ar[i,0] =0
+            main_fw_ar[i,1] =0
+            main_fw_ar[i,2] =0
+            main_fw_ar[i,3] =0
+            main_fw_ar[i,4] =0
+            main_fw_ar[i,5] =0
+   
+    #5, 5, 6, 6
+    return [fwver_np, fw_model_flow, time_term, main_fw_ar]
+
+def check_unique(col,df1,df2):
+    def change_len(x):
+        if len(x) ==10:
+            return x[:5]
+        else:
+            return x
+    print("about",col)
+    if col !='fwvers':
+        train_c = set(df1[col].unique())
+        test_c  = set(df2[col].unique())
+        total = (train_c | test_c)
+    else:
+        train_c = set(df1[col].apply(change_len).unique())
+        test_c  = set(df2[col].apply(change_len).unique())
+        total = (train_c | test_c)        
+        
+    print()
+        
+    return total
+
 def qual_change(df, user_num, user_min):
     tmp = df.groupby('user_id')[['quality_' + str(i) for i in range(13)]].nunique() - 1
     tmp2 = tmp.sum(axis=1)
@@ -323,6 +717,28 @@ def qual_change(df, user_num, user_min):
     qaul_num['n_qualchange'] = qaul_num['user_id'].map(qual_dic)
 
     return qaul_num['n_qualchange'].values
+
+
+def model_ft(df,user_num):
+    # model_nm
+    id_model = df[['user_id','model_nm']]
+    #user_num = 14999
+    #model = np.zeros((user_num,9))
+    id_model_not_dup = id_model.drop_duplicates()
+    id_model_count = id_model_not_dup.groupby('user_id').count()
+    id_model_count_np = id_model_count.values
+
+    if user_num == 15000 :
+        id_model_count_np[13991 - 10000][0] = 3
+        id_model_count_np[18525 - 10000][0] = 3
+        id_model_count_np[20921 - 10000][0] = 3
+
+    elif user_num == 14999:
+        id_model_count_np=np.insert(id_model_count_np,13262,1)
+        id_model_count_np[34758 - 30000] = 3
+
+    return id_model_count_np
+
 
 def qual_statics(df, user_count, user_min):
     # quality 11개 별 4개의 statics : 44개변수
@@ -372,8 +788,7 @@ def qual_statics(df, user_count, user_min):
             else:
                 qual_ff_all = np.concatenate((qual_ff_all,qual_ff),axis=1)
         
-        
-
+    
     col = 'quality_1'
     q1_minus1_cnt = df[df[col] == -1 ].groupby('user_id').count()[col] 
     q1_minus1_cnt = q1_minus1_cnt.reset_index("user_id")
@@ -434,8 +849,9 @@ def qual_statics(df, user_count, user_min):
     qual_24_12_rate_np = qual_24_12_rate.values.reshape(-1,1)
 
 
-<<<<<<< Updated upstream
-    return np.concatenate((qual_val_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np),axis=1)
+    return np.concatenate((qual_val_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np,qual_ff_all),axis=1)
+
+
 
 
 def nun_err(df,ver):
@@ -453,6 +869,7 @@ def nun_err(df,ver):
         nun_err_val = nun_err.values
 
     return nun_err_val
-=======
-    return np.concatenate((qual_val_all,qual_ff_all,qual_minus_val,qual_12_rate, qual_24_rate , qual_24_12_rate_np),axis=1)
->>>>>>> Stashed changes
+
+
+
+

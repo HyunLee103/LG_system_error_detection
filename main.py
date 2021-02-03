@@ -1,3 +1,4 @@
+# from system_error_LG_dacon.util import mk_time_feature
 import pandas as pd
 import numpy as np
 import datetime as dt
@@ -5,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 from pycaret.classification import *
+from collections import Counter, defaultdict
 
 from tqdm import tqdm
 import gc
@@ -15,8 +17,10 @@ from sklearn.model_selection import KFold
 import warnings
 warnings.filterwarnings(action='ignore')
 
-from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count,qual_change,qual_statics,mk_time_feature,nun_err
+from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_quality_missing,err_count,qua_count,tfidf,qual_statics,model_ft,qual_change,check_unique,dataset_trans,mk_time_feature,make_datetime,make_datetime_second,err_count_minus,dataset_trans2,make_datetime_day,nun_err
 
+from scipy.stats import skew
+from scipy.stats import norm, kurtosis
 
 test_user_id_max = 44998
 test_user_id_min = 30000
@@ -38,10 +42,6 @@ def main(sub_name,train=True,split=False,model='lgb'):
     test_err  = pd.read_csv(PATH+'test_err_data.csv')
     test_quality  = pd.read_csv(PATH+'test_quality_data.csv')
 
-    for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
-        train_quality[qual_num] = train_quality[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
-        test_quality[qual_num] = test_quality[qual_num].apply(lambda x: float(x.replace(",", "")) if type(x) == str else x)
-
     train_qt_id = set(train_quality.user_id) # 8281
     train_err_id = set(train_err.user_id)
     train_noqt_id = train_err_id - train_qt_id
@@ -54,6 +54,10 @@ def main(sub_name,train=True,split=False,model='lgb'):
     train_noqt_id = sorted(train_noqt_id)
     test_qt_id = sorted(test_qt_id)
     test_noqt_id = sorted(test_noqt_id)
+
+    for qual_num in list(map(lambda x: 'quality_'+ x, [str(i) for i in range(13)])):
+        train_quality[qual_num] = train_quality[qual_num].apply(lambda x: float(x.replace(",","")) if type(x) == str else x)
+        test_quality[qual_num] = test_quality[qual_num].apply(lambda x: float(x.replace(",", "")) if type(x) == str else x)
 
 
     ### errcode를 위한 전처리
@@ -81,46 +85,65 @@ def main(sub_name,train=True,split=False,model='lgb'):
     complainer_48h_errcode_unique_testtrain = complainer_48h_errcode_unique.intersection(test_err.errcode.unique())
     no_complainer_48h_errcode_unique_testtrain = no_complainer_48h_errcode_unique.intersection(test_err.errcode.unique())
 
+    model_total=check_unique('model_nm',train_err,test_err)
+    errtype_total=check_unique('errtype',train_err,test_err)
+    fwver_total = check_unique('fwver',train_err,test_err)
 
     ## FE
     err_train = mk_err_feature(train_err,15000,10000,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
-    q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
+    # q_train = mk_qt_feature(train_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],15000,10000)
     err_fwver_train = mk_fwver_feature(train_err,15000,10000)
+    datalist = dataset_trans(train_err,'train',15000,42,10000,fwver_total)
+    seoho_train = np.concatenate(tuple(datalist),axis=1)   
     err_train_count = err_count(train_err,15000,'train')
     train_qual_change = qual_change(train_quality, 15000, 10000)
-    train_qual_stats = qual_statics(train_quality, 15000, 10000)
+    model_train = model_ft(train_err,15000)
+    nn_train = err_count_minus(train_err, 15000,10000)
+    datalist2 = dataset_trans2(train_err,'train',15000,42,10000, fwver_total)
+    seo_train2 = np.concatenate(tuple(datalist2),axis=1)
+
     train_err_time = mk_time_feature(train_err,15000, 10000, err_mode=True)
     train_qual_time = mk_time_feature(train_quality,15000,10000, err_mode=False)
-    train_nun = nun_err(train_err,'train')
+    train_nun = nun_err(train_err,'train')  
 
-    train_x = np.concatenate((err_train, q_train, err_fwver_train, err_train_count,train_qual_change,train_qual_stats,train_err_time,train_qual_time,train_nun), axis=1)
+    qt_ch_err_ratio = train_qual_change.reshape(-1,1)/err_train_count
+    fw_err_ratio = err_fwver_train.reshape(-1,1)/err_train_count
+    fw_model_ratio = err_fwver_train.reshape(-1,1)/model_train
+    train_qual_stats = qual_statics(train_quality, 15000, 10000)
 
+    train_x = np.concatenate((err_train, train_qual_stats,train_err_time, train_qual_time, err_fwver_train, err_train_count,seoho_train,train_qual_change.reshape(-1,1),model_train,qt_ch_err_ratio,fw_err_ratio,fw_model_ratio,nn_train,seo_train2,train_nun), axis=1)
 
+    
     err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
-    q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
+    # q_test = mk_qt_feature(test_quality,['quality_0','quality_1','quality_2','quality_5','quality_6','quality_7','quality_8','quality_9','quality_10','quality_11','quality_12'],test_user_number,test_user_id_min)
     err_fwver_test = mk_fwver_feature(test_err, test_user_number,test_user_id_min)
-    # err_time_seg_test = mk_time_seg_feature(test_err,test_user_number,test_user_id_min)
-    # quality_time_seg_test = mk_time_seg_feature(test_quality,test_user_number,test_user_id_min)
+    test_datalist = dataset_trans(test_err,'test',14999,42,30000,fwver_total)
+    seoho_test = np.concatenate(tuple(test_datalist),axis=1)
     err_test_count = err_count(test_err,test_user_number,'test')
-    # qua_test_count = qua_count(train_quality,test_user_number,test_user_id_min,test_qt_id, test_noqt_id)
     test_qual_change = qual_change(test_quality, test_user_number,test_user_id_min)
+    model_test = model_ft(test_err,14999)
+    nn_test = err_count_minus(test_err,14999,30000)
     test_qual_stats = qual_statics(test_quality, test_user_number,test_user_id_min)
+    test_datalist2 = dataset_trans2(test_err,'test',14999,42,30000, fwver_total)
+    seo_test2 = np.concatenate(tuple(test_datalist2),axis=1)
+
     test_err_time = mk_time_feature(test_err,test_user_number, test_user_id_min, err_mode=True)
     test_qual_time = mk_time_feature(test_quality,test_user_number, test_user_id_min, err_mode=False)
     test_nun = nun_err(test_err,'test')
 
-    test_x = np.concatenate((err_test, q_test, err_fwver_test, err_test_count,test_qual_change,test_qual_stats,test_err_time,test_qual_time,test_nun), axis=1)
+    qt_ch_err_ratio_t = test_qual_change.reshape(-1,1)/err_test_count
+    fw_err_ratio_t = err_fwver_test.reshape(-1,1)/err_test_count
+    fw_model_ratio_t = err_fwver_test.reshape(-1,1)/model_test.reshape(-1,1)
 
+    test_x = np.concatenate((err_test, test_qual_stats,test_err_time,test_qual_time, err_fwver_test, err_test_count,seoho_test,test_qual_change.reshape(-1,1),model_test.reshape(-1,1),qt_ch_err_ratio_t,fw_err_ratio_t,fw_model_ratio_t,nn_test,seo_test2,test_nun), axis=1)
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
     train_y = problem
 
     print(train_x.shape)
-    print(test_x.shape)
+    print(test_x.shape) 
 
-    pd.DataFrame(train_x).to_csv('train_x_83.csv')
-    pd.DataFrame(test_x).to_csv('test_x_83.csv')
     
     if split:
         quality_train_user_id = train_quality['user_id'].unique()
@@ -158,7 +181,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
         
         qua_train_y = train_y[quality_train_user_id]
         nonqua_train_y = train_y[nonquality_train_user_id]
-        
+
     ## modeling
     if train:
         if model == 'automl':
@@ -177,7 +200,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
                 qua_predictions = predict_model(final_model, data = test)
                 
                 
-                #nonquality_id
+                # nonquality_id
                 train = pd.DataFrame(data=nonqua_train_x)
                 train['problem'] = nonqua_train_y
                 clf = setup(data = train, target = 'problem', session_id = 123) 
@@ -244,7 +267,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
 
             if not os.path.exists('submission'):
                 os.makedirs(os.path.join('submission'))
-            sample_submission.to_csv(f"submission/30.csv", index = False)
+            sample_submission.to_csv(f"submission/37.csv", index = False)
             
 
         if model == 'lgb':
@@ -319,7 +342,5 @@ def main(sub_name,train=True,split=False,model='lgb'):
 
 if __name__ == '__main__':
     main('test')
-
-
 
 
