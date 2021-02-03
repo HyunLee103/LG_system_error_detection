@@ -1,4 +1,5 @@
 # from system_error_LG_dacon.util import mk_time_feature
+from lightgbm.callback import early_stopping
 import pandas as pd
 import numpy as np
 import datetime as dt
@@ -22,6 +23,18 @@ from util import f_pr_auc,mk_fwver_feature,mk_qt_feature,mk_err_feature,fill_qua
 from scipy.stats import skew
 from scipy.stats import norm, kurtosis
 
+import eli5
+import lightgbm as lgb
+import shap
+shap.initjs()
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_validate
+from sklearn import metrics
+from sklearn.linear_model import LogisticRegressionCV
+from sklearn.pipeline import make_pipeline
+import scikitplot as skplt
+from sklearn import preprocessing
+
 test_user_id_max = 44998
 test_user_id_min = 30000
 test_user_number = 14999
@@ -29,7 +42,6 @@ test_user_number = 14999
 train_user_id_max = 24999
 train_user_id_min = 10000
 train_user_number = 15000
-
 
 
 
@@ -111,7 +123,7 @@ def main(sub_name,train=True,split=False,model='lgb'):
     fw_model_ratio = err_fwver_train.reshape(-1,1)/model_train
     train_qual_stats = qual_statics(train_quality, 15000, 10000)
 
-    train_x = np.concatenate((err_train, train_qual_stats,train_err_time, train_qual_time, err_fwver_train, err_train_count,seoho_train,train_qual_change.reshape(-1,1),model_train,qt_ch_err_ratio,fw_err_ratio,fw_model_ratio,nn_train,seo_train2,train_nun), axis=1)
+    train_x = np.concatenate((err_train, train_qual_stats,train_err_time,train_qual_time, err_train_count,seoho_train,train_qual_change.reshape(-1,1),model_train,qt_ch_err_ratio,fw_err_ratio,fw_model_ratio,nn_train,seo_train2,train_nun), axis=1)
 
     
     err_test = mk_err_feature(test_err, test_user_number,test_user_id_min,complainer_48h_errcode_unique_testtrain,no_complainer_48h_errcode_unique_testtrain)
@@ -131,11 +143,11 @@ def main(sub_name,train=True,split=False,model='lgb'):
     test_qual_time = mk_time_feature(test_quality,test_user_number, test_user_id_min, err_mode=False)
     test_nun = nun_err(test_err,'test')
 
-    qt_ch_err_ratio_t = test_qual_change.reshape(-1,1)/err_test_count
+    qt_ch_err_ratio_t = test_qual_change.reshape(-1,1)/(err_test_count+1)
     fw_err_ratio_t = err_fwver_test.reshape(-1,1)/err_test_count
     fw_model_ratio_t = err_fwver_test.reshape(-1,1)/model_test.reshape(-1,1)
 
-    test_x = np.concatenate((err_test, test_qual_stats,test_err_time,test_qual_time, err_fwver_test, err_test_count,seoho_test,test_qual_change.reshape(-1,1),model_test.reshape(-1,1),qt_ch_err_ratio_t,fw_err_ratio_t,fw_model_ratio_t,nn_test,seo_test2,test_nun), axis=1)
+    test_x = np.concatenate((err_test, test_qual_stats,test_err_time,test_qual_time, err_test_count,seoho_test,test_qual_change.reshape(-1,1),model_test.reshape(-1,1),qt_ch_err_ratio_t,fw_err_ratio_t,fw_model_ratio_t,nn_test,seo_test2,test_nun), axis=1)
 
     problem = np.zeros(15000)
     problem[train_problem.user_id.unique()-10000] = 1
@@ -144,7 +156,8 @@ def main(sub_name,train=True,split=False,model='lgb'):
     print(train_x.shape)
     print(test_x.shape) 
 
-    
+    pd.DataFrame(train_x).isnull().sum()
+
     if split:
         quality_train_user_id = train_quality['user_id'].unique()
         quality_train_user_id = quality_train_user_id-train_user_id_min
@@ -343,4 +356,42 @@ def main(sub_name,train=True,split=False,model='lgb'):
 if __name__ == '__main__':
     main('test')
 
+# from eli5.sklearn import PermutationImportance
+# from lightgbm import LGBMClassifier
+# from sklearn.model_selection import train_test_split
+
+# parameters = {
+#     'application': 'binary',
+#     'objective': 'binary',
+#     'metric': 'auc',
+#     'is_unbalance': 'true',
+#     'boosting': 'gbdt',
+#     'num_leaves': 31,
+#     'feature_fraction': 0.5,
+#     'bagging_fraction': 0.5,
+#     'bagging_freq': 20,
+#     'learning_rate': 0.001,
+#     'verbose': 1
+# }  
+# lgbm = LGBMClassifier(n_estimators=700)
+
+# x, x_val, y, y_val = train_test_split(train_x,train_y,test_size=0.2,random_state=42)
+
+# lgbm.fit(x,y,early_stopping_rounds=100,eval_metric='auc',eval_set=[(x_val,y_val)],verbose=True)
+
+# perm = PermutationImportance(lgbm, scoring = "roc_auc", random_state = 42).fit(x_val, y_val) 
+
+# r = permutation_importance(lgbm, x_val, y_val,n_repeats=15,random_state=26)
+
+# eli5.show_weights(perm, top = 364, feature_names = [str(x) for x in range(0,364)])
+# eli5.explain_weights(perm, top=400)
+
+# tem = pd.DataFrame(x_val)
+# [x for x in range(0,364)]
+# pd.DataFrame(x).columns()
+
+# pd.DataFrame(x_val).isnull().sum()
+
+# import sklearn
+# sklearn.metrics.SCORERS.keys()
 
