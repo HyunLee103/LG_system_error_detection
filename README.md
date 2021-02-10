@@ -5,9 +5,9 @@
 
 
 ## Usage    
-    !git clone 
-    data/
-data 폴더 생성 후 아래 데이터를 넣은 뒤
+    !git clone https://github.com/HyunLee103/LG_system_error_detection.git
+
+data 폴더 생성 후 데이터를 넣은 뒤
   
     !python main.py
 
