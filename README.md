@@ -5,6 +5,8 @@
 
 
 ## Usage
+    data/
+밑에 데이터를 넣은 뒤
   
     !python main.py
 
