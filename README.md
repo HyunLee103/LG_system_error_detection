@@ -4,9 +4,10 @@
 - https://dacon.io/competitions/official/235687/overview/
 
 
-## Usage
+## Usage    
+    !git clone 
     data/
-밑에 데이터를 넣은 뒤
+data 폴더 생성 후 아래 데이터를 넣은 뒤
   
     !python main.py
 
