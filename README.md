@@ -21,5 +21,5 @@ data 폴더 생성 후 데이터를 넣은 뒤
 ## Contributor
 - Hyun Lee(https://github.com/HyunLee103)
 - Seoho Park(https://github.com/Seo-ho)
-- Gangmin Kim(https://github.com/susie202)
+- Gangmin Kim(https://github.com/Gangsss)
 - Sooyeon Cho(https://github.com/susie202)
